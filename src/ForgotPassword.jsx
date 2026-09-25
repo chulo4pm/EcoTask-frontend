@@ -7,9 +7,10 @@ import {
 
 import { useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
+import { API_BASE_URL } from "./config";
 
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_URL = `${API_BASE_URL}/api/auth`;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // The Reset Password page reads these, so the user doesn't have to type the email twice.

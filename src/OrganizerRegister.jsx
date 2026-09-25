@@ -17,6 +17,7 @@ import {
 import { useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
 import VerifyEmail from "./VerifyEmail";
+import { API_BASE_URL } from "./config";
 
 
 /* =========================================================
@@ -412,7 +413,7 @@ function OrganizerRegister({
       body.append("password", values.password);
       documents.forEach((file) => body.append("documents", file));
 
-      const res = await fetch('http://localhost:5000/api/auth/organizer/register', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/organizer/register`, {
         method: 'POST',
         body,
       });

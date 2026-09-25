@@ -2,6 +2,7 @@ import { AlertCircle, ArrowLeft, MailCheck, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
 import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY } from "./ForgotPassword";
+import { API_BASE_URL } from "./config";
 
 
 /* =========================================================
@@ -16,7 +17,7 @@ import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY } from "./ForgotPas
      onVerified(code) - code confirmed, go to Reset Password
 ========================================================= */
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_URL = `${API_BASE_URL}/api/auth`;
 const CODE_LENGTH = 6;
 
 const readSession = (key) => {

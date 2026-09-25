@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
 import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY } from "./ForgotPassword";
+import { API_BASE_URL } from "./config";
 
 
 /* =========================================================
@@ -20,7 +21,7 @@ import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY } from "./ForgotPas
    ecotask-backend/utils/validators.js
 ========================================================= */
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_URL = `${API_BASE_URL}/api/auth`;
 
 const PASSWORD_RULES = [
   { key: "length", label: "At least 8 characters", test: (v) => v.length >= 8 },

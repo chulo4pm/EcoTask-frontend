@@ -1,5 +1,6 @@
 import { AlertCircle, ArrowLeft, CheckCircle2, MailCheck, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "./config";
 
 
 /* =========================================================
@@ -17,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
      onBack()         - go back to the previous screen
 ========================================================= */
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_URL = `${API_BASE_URL}/api/auth`;
 const CODE_LENGTH = 6;
 
 const readJson = async (res) => {

@@ -32,6 +32,7 @@ import {
   Lock,
   AlertTriangle,
 } from 'lucide-react';
+import { API_BASE_URL } from "./config";
 
 // Sidebar Navigation Items
 const navItems = [
@@ -43,7 +44,6 @@ const navItems = [
   { label: 'Announcements', icon: Megaphone },
 ];
 
-const API_BASE_URL = 'http://localhost:5000';
 
 const getDateKey = (dateValue) => {
   if (!dateValue) return '';
@@ -90,7 +90,7 @@ export default function AdminDashboard({ onLogout }) {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
         if (!adminInfo.token) return;
-        const response = await fetch('http://localhost:5000/api/announcements', {
+        const response = await fetch(`${API_BASE_URL}/api/announcements`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -484,7 +484,7 @@ function DashboardView({ goTo }) {
     const loadStats = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/dashboard/admin-stats', {
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/admin-stats`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -502,7 +502,7 @@ function DashboardView({ goTo }) {
     const loadActivityFeed = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/dashboard/admin-activity-feed', {
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/admin-activity-feed`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -521,7 +521,7 @@ function DashboardView({ goTo }) {
     const loadTopVolunteers = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/dashboard/top-volunteers?limit=5', {
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/top-volunteers?limit=5`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -1968,7 +1968,7 @@ function VolunteerManagementView() {
     const loadUsers = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/users', {
+        const response = await fetch(`${API_BASE_URL}/api/users`, {
           headers: {
             Authorization: `Bearer ${adminInfo.token}`,
           },
@@ -2000,7 +2000,7 @@ function VolunteerManagementView() {
 
     try {
       const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/users/${userToDelete._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userToDelete._id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${adminInfo.token}`,
@@ -2225,7 +2225,7 @@ function AnnouncementsView() {
     const loadAnnouncements = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/announcements', {
+        const response = await fetch(`${API_BASE_URL}/api/announcements`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -2260,7 +2260,7 @@ function AnnouncementsView() {
 
     try {
       const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-      const response = await fetch('http://localhost:5000/api/announcements', {
+      const response = await fetch(`${API_BASE_URL}/api/announcements`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2285,7 +2285,7 @@ function AnnouncementsView() {
   const handleDelete = async (id) => {
     try {
       const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/announcements/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/announcements/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminInfo.token}` },
       });
@@ -2305,7 +2305,7 @@ function AnnouncementsView() {
 
     try {
       const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/announcements/${announcement._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/announcements/${announcement._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

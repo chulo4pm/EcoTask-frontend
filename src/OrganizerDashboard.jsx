@@ -39,6 +39,7 @@ import {
   Building2,
   Ban,
 } from 'lucide-react';
+import { API_BASE_URL } from "./config";
 
 // Sidebar Navigation Items
 const navItems = [
@@ -57,7 +58,6 @@ const getOrganizerInfo = () => {
   }
 };
 
-const API_BASE_URL = 'http://localhost:5000';
 const getActivityImageUrl = (image) => (
   image?.startsWith('/uploads/') ? `${API_BASE_URL}${image}` : image
 );
@@ -955,7 +955,7 @@ function CreateActivityView() {
       body.append('volunteerLimit', String(Number(formData.volunteerLimit)));
       if (formData.coverImageFile) body.append('coverImage', formData.coverImageFile);
 
-      const response = await fetch('http://localhost:5000/api/activities', {
+      const response = await fetch(`${API_BASE_URL}/api/activities`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${organizerInfo.token}` },
         body,
@@ -1273,7 +1273,7 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
     const loadActivities = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/activities', {
+        const response = await fetch(`${API_BASE_URL}/api/activities`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -1308,7 +1308,7 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
   const loadParticipants = async (activity) => {
     try {
       const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/activities/${activity._id}/participants`, {
+      const response = await fetch(`${API_BASE_URL}/api/activities/${activity._id}/participants`, {
         headers: { Authorization: `Bearer ${adminInfo.token}` },
       });
       const data = await response.json();
@@ -1323,7 +1323,7 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
     if (!window.confirm(`Issue certificates to present volunteers for ${activity.title}?`)) return;
     try {
       const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/participation/activity/${activity._id}/certificates`, {
+      const response = await fetch(`${API_BASE_URL}/api/participation/activity/${activity._id}/certificates`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${adminInfo.token}` },
       });
@@ -1338,7 +1338,7 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
   const loadCertificateParticipants = async (activity) => {
     try {
       const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/participation/activity/${activity._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/participation/activity/${activity._id}`, {
         headers: { Authorization: `Bearer ${adminInfo.token}` },
       });
       const data = await response.json();
@@ -1353,7 +1353,7 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
     if (!window.confirm(`Delete ${activity.title}?`)) return;
     try {
       const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/activities/${activity._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/activities/${activity._id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminInfo.token}` },
       });
@@ -2005,7 +2005,7 @@ function ParticipationRecordView() {
     const loadActivities = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-        const response = await fetch('http://localhost:5000/api/activities', {
+        const response = await fetch(`${API_BASE_URL}/api/activities`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -2028,7 +2028,7 @@ function ParticipationRecordView() {
     const loadParticipants = async () => {
       try {
         const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-        const response = await fetch(`http://localhost:5000/api/participation/activity/${selectedActivity}`, {
+        const response = await fetch(`${API_BASE_URL}/api/participation/activity/${selectedActivity}`, {
           headers: { Authorization: `Bearer ${adminInfo.token}` },
         });
         const data = await response.json();
@@ -2045,7 +2045,7 @@ function ParticipationRecordView() {
   const handleAttendanceChange = async (id, newStatus) => {
     try {
       const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-      const response = await fetch(`http://localhost:5000/api/participation/${id}/attendance`, {
+      const response = await fetch(`${API_BASE_URL}/api/participation/${id}/attendance`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

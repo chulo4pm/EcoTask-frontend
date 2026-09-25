@@ -1,7 +1,6 @@
 import volunteerImage from './assets/voluteer.jpg'
 import { jsPDF } from 'jspdf'
 
-const API_BASE_URL = 'http://localhost:5000'
 const getActivityImageUrl = (image) => (
   image?.startsWith('/uploads/') ? `${API_BASE_URL}${image}` : image
 )
@@ -81,6 +80,7 @@ import {
   Flag,
   Building2,
 } from 'lucide-react'
+import { API_BASE_URL } from "./config";
 
 /* =========================================================
    ECOTASK LOGO
@@ -137,8 +137,8 @@ export default function App({ onLogout }) {
         if (!currentUser.token) return
         const headers = { Authorization: `Bearer ${currentUser.token}` }
         const [announcementResponse, activityResponse] = await Promise.all([
-          fetch('http://localhost:5000/api/announcements', { headers }),
-          fetch('http://localhost:5000/api/activities', { headers }),
+          fetch(`${API_BASE_URL}/api/announcements`, { headers }),
+          fetch(`${API_BASE_URL}/api/activities`, { headers }),
         ])
         const announcements = await announcementResponse.json()
         const activities = await activityResponse.json()
@@ -578,7 +578,7 @@ function Dashboard({ goTo, displayName }) {
     const loadStats = async () => {
       try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        const response = await fetch('http://localhost:5000/api/dashboard/volunteer-stats', {
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/volunteer-stats`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
         const data = await response.json()
@@ -596,7 +596,7 @@ function Dashboard({ goTo, displayName }) {
     const loadActivities = async () => {
       try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        const response = await fetch('http://localhost:5000/api/activities', {
+        const response = await fetch(`${API_BASE_URL}/api/activities`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
         const data = await response.json()
@@ -934,7 +934,7 @@ function Activities() {
     const loadActivities = async () => {
       try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        const response = await fetch('http://localhost:5000/api/activities', {
+        const response = await fetch(`${API_BASE_URL}/api/activities`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
         const data = await response.json()
@@ -961,7 +961,7 @@ function Activities() {
         }))
 
         setActivities(sortActivitiesByStatus(normalizedActivities))
-        fetch('http://localhost:5000/api/reports/mine', {
+        fetch(`${API_BASE_URL}/api/reports/mine`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
           .then((reportResponse) => (reportResponse.ok ? reportResponse.json() : []))
@@ -1000,7 +1000,7 @@ function Activities() {
     if (!registrationActivity) return
     try {
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-      const response = await fetch(`http://localhost:5000/api/activities/${registrationActivity.id}/join`, {
+      const response = await fetch(`${API_BASE_URL}/api/activities/${registrationActivity.id}/join`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${userInfo.token}` },
       })
@@ -1018,7 +1018,7 @@ function Activities() {
     if (!cancelActivity) return
     try {
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-      const response = await fetch(`http://localhost:5000/api/activities/${cancelActivity.id}/leave`, {
+      const response = await fetch(`${API_BASE_URL}/api/activities/${cancelActivity.id}/leave`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${userInfo.token}` },
       })
@@ -1407,7 +1407,7 @@ function ReportActivityModal({ activity, onClose, onReported }) {
     setError('')
     try {
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-      const response = await fetch('http://localhost:5000/api/reports', {
+      const response = await fetch(`${API_BASE_URL}/api/reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1496,12 +1496,12 @@ function Schedule() {
     const loadSchedule = async () => {
       try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        const response = await fetch('http://localhost:5000/api/activities', {
+        const response = await fetch(`${API_BASE_URL}/api/activities`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
         const data = await response.json()
         if (!response.ok) throw new Error(data.message || 'Unable to load schedule')
-        const recordsResponse = await fetch('http://localhost:5000/api/participation/my-records', {
+        const recordsResponse = await fetch(`${API_BASE_URL}/api/participation/my-records`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
         const records = await recordsResponse.json()
@@ -1732,10 +1732,10 @@ function Records() {
       try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
         const [recordsResponse, statsResponse] = await Promise.all([
-          fetch('http://localhost:5000/api/participation/my-records', {
+          fetch(`${API_BASE_URL}/api/participation/my-records`, {
             headers: { Authorization: `Bearer ${userInfo.token}` },
           }),
-          fetch('http://localhost:5000/api/dashboard/volunteer-stats', {
+          fetch(`${API_BASE_URL}/api/dashboard/volunteer-stats`, {
             headers: { Authorization: `Bearer ${userInfo.token}` },
           }),
         ])
@@ -1980,7 +1980,7 @@ function Announcement() {
     const loadAnnouncements = async () => {
       try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        const response = await fetch('http://localhost:5000/api/announcements', {
+        const response = await fetch(`${API_BASE_URL}/api/announcements`, {
           headers: { Authorization: `Bearer ${userInfo.token}` },
         })
         const data = await response.json()
@@ -2166,7 +2166,7 @@ function SettingsPage({ onProfileUpdated }) {
     try {
       setSaving(true)
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-      const response = await fetch('http://localhost:5000/api/users/me', {
+      const response = await fetch(`${API_BASE_URL}/api/users/me`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
