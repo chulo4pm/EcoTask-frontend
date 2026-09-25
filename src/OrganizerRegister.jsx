@@ -1,6 +1,9 @@
 import {
   AlertCircle,
   ArrowLeft,
+  Building2,
+  FileText,
+  Upload,
   Check,
   Eye,
   EyeOff,
@@ -51,6 +54,13 @@ const validators = {
     if ((name.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length < 2) return "Full name must contain at least 2 letters.";
     return "";
   },
+  organizationName: (value) => {
+    const name = value.trim().replace(/\s+/g, " ");
+    if (!name) return "Organization name is required.";
+    if (name.length < 2 || name.length > 100) return "Organization name must be 2 to 100 characters.";
+    if (!/^[A-Za-z0-9À-ÖØ-öø-ÿ.,'&()\- ]+$/.test(name)) return "Organization name contains invalid characters.";
+    return "";
+  },
   email: (value) => {
     const email = value.trim();
     if (!email) return "Email address is required.";
@@ -85,8 +95,18 @@ const validateAll = (values) =>
 // Backend uses `name`; the form field is `fullName`.
 const SERVER_FIELD_MAP = { name: "fullName" };
 
+// Verification documents: JPG, PNG, or PDF, max 5 MB each, up to 3 files.
+const DOC_TYPES = ["image/jpeg", "image/png", "application/pdf"];
+const DOC_MAX_SIZE = 5 * 1024 * 1024;
+const DOC_MAX_FILES = 3;
+
+const formatSize = (bytes) => (
+  bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+);
+
 const EMPTY_FORM = {
   fullName: "",
+  organizationName: "",
   email: "",
   phone: "",
   password: "",
@@ -138,42 +158,6 @@ function EcoTaskLogo() {
       </span>
 
     </div>
-  );
-}
-
-
-/* =========================================================
-   GOOGLE ICON
-========================================================= */
-
-function GoogleIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        fill="#4285F4"
-        d="M21.35 12.23c0-.71-.06-1.4-.18-2.05H12v3.88h5.24a4.48 4.48 0 0 1-1.94 2.94v2.51h3.14c1.84-1.69 2.91-4.18 2.91-7.28Z"
-      />
-
-      <path
-        fill="#34A853"
-        d="M12 21.75c2.63 0 4.83-.87 6.44-2.35l-3.14-2.51c-.87.58-1.99.92-3.3.92-2.54 0-4.7-1.72-5.47-4.03H3.28v2.59A9.75 9.75 0 0 0 12 21.75Z"
-      />
-
-      <path
-        fill="#FBBC05"
-        d="M6.53 13.78A5.87 5.87 0 0 1 6.22 12c0-.62.11-1.22.31-1.78V7.63H3.28A9.75 9.75 0 0 0 2.25 12c0 1.57.38 3.05 1.03 4.37l3.25-2.59Z"
-      />
-
-      <path
-        fill="#EA4335"
-        d="M12 6.19c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.28 14.63 2.25 12 2.25a9.75 9.75 0 0 0-8.72 5.38l3.25 2.59c.77-2.31 2.93-4.03 5.47-4.03Z"
-      />
-    </svg>
   );
 }
 
@@ -304,11 +288,10 @@ const inputClass = `
   placeholder:text-[#6b7280]
 `;
 
-function Register({
+function OrganizerRegister({
   onBack,
   onLogin,
-  onRegister,
-  onGoogleRegister,
+  onRegistered,
 }) {
 
   const [values, setValues] = useState(EMPTY_FORM);
@@ -328,6 +311,9 @@ function Register({
   const [passwordFocused, setPasswordFocused] =
     useState(false);
 
+  const [documents, setDocuments] = useState([]);
+  const [docError, setDocError] = useState("");
+
   const errors = validateAll(values);
 
   // Show an error only after the user has left the field (or tried to submit).
@@ -345,6 +331,10 @@ function Register({
     // Phone: digits only, max 11.
     if (name === "phone") {
       value = value.replace(/\D/g, "").slice(0, 11);
+    }
+
+    if (name === "organizationName") {
+      value = value.replace(/[^A-Za-z0-9À-ÖØ-öø-ÿ.,'&()\- ]/g, "").slice(0, 100);
     }
 
     // Name: block digits and symbols as they're typed.
@@ -369,6 +359,31 @@ function Register({
   };
 
 
+  const addDocuments = (fileList) => {
+    setDocError("");
+    const incoming = Array.from(fileList || []);
+    const badType = incoming.find((file) => !DOC_TYPES.includes(file.type));
+    if (badType) {
+      setDocError(`${badType.name}: only JPG, PNG, or PDF files are allowed.`);
+      return;
+    }
+    const tooBig = incoming.find((file) => file.size > DOC_MAX_SIZE);
+    if (tooBig) {
+      setDocError(`${tooBig.name} is larger than 5 MB.`);
+      return;
+    }
+    if (documents.length + incoming.length > DOC_MAX_FILES) {
+      setDocError(`You can upload up to ${DOC_MAX_FILES} documents.`);
+    }
+    setDocuments((current) => [...current, ...incoming].slice(0, DOC_MAX_FILES));
+  };
+
+  const removeDocument = (index) => {
+    setDocuments((current) => current.filter((_, i) => i !== index));
+    setDocError("");
+  };
+
+
   const handleSubmit = async (e) => {
 
     e.preventDefault();
@@ -377,24 +392,29 @@ function Register({
     setTouched(Object.fromEntries(Object.keys(EMPTY_FORM).map((key) => [key, true])));
 
     const firstInvalid = Object.keys(errors).find((field) => errors[field]);
+    if (documents.length === 0) setDocError("Upload at least one verification document.");
     if (firstInvalid) {
       e.currentTarget.elements[firstInvalid]?.focus();
       return;
     }
+    if (documents.length === 0) return;
 
     setSubmitting(true);
     setFormError("");
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/register', {
+      // Multipart form so the documents can be uploaded with the account details.
+      const body = new FormData();
+      body.append("name", values.fullName.trim().replace(/\s+/g, " "));
+      body.append("organizationName", values.organizationName.trim().replace(/\s+/g, " "));
+      body.append("email", values.email.trim().toLowerCase());
+      body.append("phone", values.phone);
+      body.append("password", values.password);
+      documents.forEach((file) => body.append("documents", file));
+
+      const res = await fetch('http://localhost:5000/api/auth/organizer/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: values.fullName.trim().replace(/\s+/g, " "),
-          email: values.email.trim().toLowerCase(),
-          phone: values.phone,
-          password: values.password,
-        }),
+        body,
       });
 
       let data;
@@ -413,6 +433,7 @@ function Register({
             Object.entries(data.errors).map(([key, message]) => [SERVER_FIELD_MAP[key] || key, message])
           );
           setServerErrors(mapped);
+          if (mapped.documents) setDocError(mapped.documents);
           return;
         }
 
@@ -425,7 +446,7 @@ function Register({
         throw new Error(data.message || 'Registration failed');
       }
 
-      // Account created but not active yet: ask for the emailed code.
+      // Account created: confirm the email first, then it waits for admin approval.
       setVerification(data);
     } catch (err) {
       setFormError(
@@ -439,18 +460,6 @@ function Register({
   };
 
 
-  // Code verified: the server logs the volunteer in (returns a token).
-  const handleVerified = (data) => {
-    if (data.token) {
-      localStorage.setItem('userInfo', JSON.stringify(data));
-      if (onRegister) onRegister();
-      else if (onLogin) onLogin();
-    } else if (onLogin) {
-      onLogin();
-    }
-  };
-
-
   if (verification) {
     return (
       <VerifyEmail
@@ -458,7 +467,8 @@ function Register({
         message={verification.message}
         emailSent={verification.emailSent}
         resendAvailableIn={verification.resendAvailableIn}
-        onVerified={handleVerified}
+        // Email confirmed - continue to the usual "wait for admin approval" screen.
+        onVerified={() => onRegistered?.()}
         onBack={() => setVerification(null)}
       />
     );
@@ -604,6 +614,8 @@ function Register({
 
               <p className="mt-5 text-[14px] leading-7 text-white">
 
+                Organizers create environmental activities,
+                track attendance, and issue certificates.
                 EcoTask is a platform that connects volunteers
                 with meaningful environmental activities and
                 community projects. Join us and make a positive
@@ -697,11 +709,11 @@ function Register({
               "
             >
 
-              Register to
+              Register as
 
               <br />
 
-              Volunteer
+              Organizer
 
             </h1>
 
@@ -717,8 +729,9 @@ function Register({
               "
             >
 
-              Fill up the form to get onboard as one of
-              our volunteers at EcoTask.
+              Post activities for your group. Upload a document
+              that proves your organization is real (e.g. business
+              permit, SEC/DTI registration, or school/LGU letter).
 
             </p>
 
@@ -774,6 +787,30 @@ function Register({
                 maxLength={50}
                 aria-invalid={Boolean(visibleError("fullName"))}
                 aria-describedby="fullName-error"
+                className={inputClass}
+              />
+            </FormField>
+
+
+            {/* ORGANIZATION */}
+
+            <FormField
+              icon={Building2}
+              id="organizationName-error"
+              error={visibleError("organizationName")}
+              valid={isValid("organizationName")}
+            >
+              <input
+                name="organizationName"
+                type="text"
+                placeholder="Organization / group name"
+                autoComplete="organization"
+                value={values.organizationName}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                maxLength={100}
+                aria-invalid={Boolean(visibleError("organizationName"))}
+                aria-describedby="organizationName-error"
                 className={inputClass}
               />
             </FormField>
@@ -937,6 +974,59 @@ function Register({
             </FormField>
 
 
+            {/* VERIFICATION DOCUMENTS */}
+
+            <div className="mb-5">
+              <p className="mb-1.5 text-[13px] font-semibold text-[#374151]">
+                Verification documents <span className="font-normal text-[#6b7280]">(JPG, PNG or PDF · max 5 MB each · up to 3)</span>
+              </p>
+
+              <label
+                className={`flex cursor-pointer items-center gap-3 rounded-md border-2 border-dashed px-4 py-4 transition ${
+                  docError ? "border-red-400 bg-red-50" : "border-[#cbd5d0] bg-[#f6faf7] hover:border-[#20b83f]"
+                } ${documents.length >= DOC_MAX_FILES ? "pointer-events-none opacity-60" : ""}`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); addDocuments(e.dataTransfer.files); }}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#159447] shadow-sm">
+                  <Upload size={18} />
+                </span>
+                <span className="text-[13px] text-[#374151]">
+                  <span className="font-semibold text-[#159447]">Click to upload</span> or drag files here
+                </span>
+                <input
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                  className="hidden"
+                  onChange={(e) => { addDocuments(e.target.files); e.target.value = ""; }}
+                />
+              </label>
+
+              {documents.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {documents.map((file, index) => (
+                    <li key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-md border border-[#e2ebe5] bg-white px-3 py-2 text-[12px]">
+                      <FileText size={15} className="shrink-0 text-[#159447]" />
+                      <span className="min-w-0 flex-1 truncate text-[#374151]">{file.name}</span>
+                      <span className="shrink-0 text-[#6b7280]">{formatSize(file.size)}</span>
+                      <button type="button" onClick={() => removeDocument(index)} className="shrink-0 font-semibold text-red-600 hover:underline">
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {docError && (
+                <p role="alert" className="mt-1.5 flex items-start gap-1.5 text-[12px] font-medium leading-4 text-red-600">
+                  <AlertCircle size={13} className="mt-[1px] shrink-0" />
+                  {docError}
+                </p>
+              )}
+            </div>
+
+
             {/* REGISTER BUTTON */}
 
             <button
@@ -959,26 +1049,12 @@ function Register({
               "
             >
 
-              {submitting ? "Creating Account..." : "Create Account"}
+              {submitting ? "Submitting..." : "Submit for Approval"}
 
             </button>
 
 
           </form>
-
-
-          {/* =================================================
-              OR DIVIDER
-          ================================================= */}
-
-
-
-
-          {/* =================================================
-              CONTINUE WITH GOOGLE
-          ================================================= */}
-
-          
 
 
           {/* =================================================
@@ -988,7 +1064,7 @@ function Register({
           <p className="mt-5 text-center text-[12px] text-[#6b7280]">
 
 
-            Already have an account?{" "}
+            Already have an organizer account?{" "}
 
 
             <button
@@ -1021,4 +1097,4 @@ function Register({
 }
 
 
-export default Register;
+export default OrganizerRegister;

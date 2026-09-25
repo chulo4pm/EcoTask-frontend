@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  Building2,
   ArrowLeft,
   Clock,
   Eye,
@@ -19,7 +20,7 @@ import { useEffect, useState } from "react";
    actually enforces the limit; this is only for the UI.
 ========================================================= */
 
-const LOCK_KEY = "ecotaskLoginLockedUntil";
+const LOCK_KEY = "ecotaskOrganizerLoginLockedUntil";
 const DEFAULT_LOCK_SECONDS = 15 * 60;
 
 const readLock = () => {
@@ -99,51 +100,14 @@ function EcoTaskLogo() {
 
 
 /* =========================================================
-   GOOGLE ICON
-========================================================= */
-
-function GoogleIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        fill="#4285F4"
-        d="M21.35 12.23c0-.71-.06-1.4-.18-2.05H12v3.88h5.24a4.48 4.48 0 0 1-1.94 2.94v2.51h3.14c1.84-1.69 2.91-4.18 2.91-7.28Z"
-      />
-
-      <path
-        fill="#34A853"
-        d="M12 21.75c2.63 0 4.83-.87 6.44-2.35l-3.14-2.51c-.87.58-1.99.92-3.3.92-2.54 0-4.7-1.72-5.47-4.03H3.28v2.59A9.75 9.75 0 0 0 12 21.75Z"
-      />
-
-      <path
-        fill="#FBBC05"
-        d="M6.53 13.78A5.87 5.87 0 0 1 6.22 12c0-.62.11-1.22.31-1.78V7.63H3.28A9.75 9.75 0 0 0 2.25 12c0 1.57.38 3.05 1.03 4.37l3.25-2.59Z"
-      />
-
-      <path
-        fill="#EA4335"
-        d="M12 6.19c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.28 14.63 2.25 12 2.25a9.75 9.75 0 0 0-8.72 5.38l3.25 2.59c.77-2.31 2.93-4.03 5.47-4.03Z"
-      />
-    </svg>
-  );
-}
-
-
-/* =========================================================
    LOGIN
 ========================================================= */
 
-function Login({
+function OrganizerLogin({
   onBack,
   onRegister,
   onLogin,
   onForgotPassword,
-  onGoogleLogin,
 }) {
 
   const [showPassword, setShowPassword] =
@@ -236,17 +200,13 @@ function Login({
 
       saveLock(0);
 
-      // This page is for volunteers only. Organizers and admins have their own login pages.
-      if (data.role !== 'volunteer') {
-        setError(
-          data.role === 'organizer'
-            ? 'This is an organizer account. Please use the Organizer Login from the home page.'
-            : 'This is an admin account. Please use the Admin Login from the home page.'
-        );
+      if (data.role !== 'organizer') {
+        setError('This is not an organizer account. Volunteers and admins have their own login pages.');
         return;
       }
 
-      localStorage.setItem('userInfo', JSON.stringify(data));
+      // Pending / rejected organizers can still log in to see their status.
+      localStorage.setItem('organizerInfo', JSON.stringify(data));
       onLogin();
     } catch (err) {
       setError(
@@ -267,11 +227,11 @@ function Login({
       setError(data.message || 'Your email is verified. Please sign in.');
       return;
     }
-    if (data.role !== 'volunteer') {
-      setError('Your email is verified. This account is not a volunteer account, so please use the matching login page.');
+    if (data.role !== 'organizer') {
+      setError('Your email is verified. This is not an organizer account, so please use the matching login page.');
       return;
     }
-    localStorage.setItem('userInfo', JSON.stringify(data));
+    localStorage.setItem('organizerInfo', JSON.stringify(data));
     onLogin();
   };
 
@@ -383,6 +343,8 @@ function Login({
 
               <p className="text-base leading-7 font-medium text-white">
 
+                Organizers post environmental activities, track
+                attendance, and issue certificates to volunteers.
                 EcoTask is a platform that connects volunteers
                 with meaningful environmental activities and
                 community projects. Join us and make a positive
@@ -441,13 +403,13 @@ function Login({
             {/* TITLE */}
 
             <h1 className="text-center text-[42px] font-extrabold tracking-tight text-[#111827] mb-3">
-              Welcome Back
+              Organizer Login
             </h1>
 
 
             <p className="text-center text-sm text-[#6b7280] mb-7">
 
-              Login to continue your journey with EcoTask.
+              Post activities, track attendance, and issue certificates.
 
             </p>
 
@@ -623,42 +585,24 @@ function Login({
               </div>
 
 
-              {/* REMEMBER + FORGOT */}
+              {/* FORGOT PASSWORD */}
 
-              <div className="flex items-center justify-between mb-6">
-
-
-                <label className="flex items-center gap-2 text-sm cursor-pointer text-[#6b7280]">
-
-
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 accent-[#20b84b]"
-                  />
-
-
-                  Remember me
+              {onForgotPassword && (
+                <div className="mb-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onForgotPassword}
+                    className="text-sm font-semibold text-[#159447] hover:underline"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
 
 
-                </label>
-
-
-                <button
-                  type="button"
-                  onClick={onForgotPassword}
-                  className="
-                    text-sm
-                    font-semibold
-                    text-[#159447]
-                    hover:underline
-                  "
-                >
-
-                  Forgot Password?
-
-                </button>
-
-
+              <div className="mb-6 flex items-center gap-2 rounded-md border border-[#cfe9d6] bg-[#f3fbf5] px-3 py-2 text-xs text-[#2f6b43]">
+                <Building2 size={15} className="shrink-0" />
+                New organizer accounts must be approved by the admin before you can post activities.
               </div>
 
 
@@ -695,15 +639,12 @@ function Login({
             </form>
 
 
-            {/* OR DIVIDER */}
-
-            
             {/* SIGN UP */}
 
             <p className="text-center text-sm text-[#6b7280] mt-5">
 
 
-              Don't have an account?{" "}
+              Don't have an organizer account?{" "}
 
 
               <button
@@ -716,7 +657,7 @@ function Login({
                 "
               >
 
-                Sign Up
+                Apply as Organizer
 
               </button>
 
@@ -739,4 +680,4 @@ function Login({
 }
 
 
-export default Login;
+export default OrganizerLogin;
