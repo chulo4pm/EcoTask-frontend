@@ -244,11 +244,11 @@ function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerR
 
           <div className="flex items-center gap-2.5">
             {/* Log in menu: Volunteer / Organizer */}
-            <div ref={loginRef} className="relative hidden sm:block">
+            <div ref={loginRef} className="relative">
               <button
                 onClick={() => setLoginOpen(!loginOpen)}
                 aria-expanded={loginOpen}
-                className={`${ghostBtn} px-4 py-2.5 text-sm`}
+                className={`${ghostBtn} px-3 py-2.5 text-sm sm:px-4`}
               >
                 <LogIn size={16} />
                 Log in
@@ -281,9 +281,12 @@ function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerR
               )}
             </div>
 
-            <button onClick={onGetStarted} className={`${primaryBtn} px-4 py-2.5 text-sm`}>
-              Sign up
-            </button>
+            {/* Sign up shows on bigger screens; on phones it's in the menu (☰). */}
+            <span className="hidden sm:block">
+              <button onClick={onGetStarted} className={`${primaryBtn} px-4 py-2.5 text-sm`}>
+                Sign up
+              </button>
+            </span>
 
             <button
               onClick={() => setMenuOpen(!menuOpen)}

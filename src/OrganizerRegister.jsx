@@ -513,7 +513,8 @@ function OrganizerRegister({
             left-5
             top-5
             z-30
-            flex
+            hidden
+            lg:flex
             h-10
             w-10
             items-center
