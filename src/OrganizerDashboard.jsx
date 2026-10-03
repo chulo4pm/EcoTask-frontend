@@ -1991,27 +1991,84 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
 }
 
 /* ==========================================
-   PARTICIPATION RECORD VIEW
+   PARTICIPATION RECORD
+   Left: activity list with filters. Right: attendance for the chosen activity.
    ========================================== */
+const LIST_FILTERS = ['All', 'Needs attendance', 'Today', 'Upcoming', 'Completed'];
+
+// Attendance totals sent by the backend; falls back to the joined count for older backends.
+const getAttendanceSummary = (activity) => activity.attendance || {
+  total: activity.participants?.length || 0,
+  present: 0,
+  late: 0,
+  absent: 0,
+  unmarked: null,
+};
+
+const summarizeParticipants = (records) => {
+  const count = (value) => records.filter((p) => p.attendance === value).length;
+  const present = count('present');
+  const late = count('late');
+  const absent = count('absent');
+  return { total: records.length, present, late, absent, unmarked: records.length - present - late - absent };
+};
+
+// Today's activities first, then upcoming (soonest first), then completed (newest first).
+const sortForAttendance = (activities) => {
+  const rank = { Ongoing: 0, Upcoming: 1, Completed: 2 };
+  return [...activities].sort((a, b) => {
+    const statusA = getActivityStatus(a.date);
+    const statusB = getActivityStatus(b.date);
+    if (statusA !== statusB) return rank[statusA] - rank[statusB];
+    const diff = new Date(a.date) - new Date(b.date);
+    return statusA === 'Completed' ? -diff : diff;
+  });
+};
+
+const needsAttendance = (activity) => {
+  const status = getActivityStatus(activity.date);
+  const { unmarked } = getAttendanceSummary(activity);
+  return status !== 'Upcoming' && unmarked > 0;
+};
+
+// Open on the most useful activity: today's, then the latest completed one with
+// unmarked volunteers, then the next upcoming one, then whatever is first.
+const pickDefaultActivity = (sorted) => (
+  sorted.find((a) => getActivityStatus(a.date) === 'Ongoing')
+  || sorted.find(needsAttendance)
+  || sorted.find((a) => getActivityStatus(a.date) === 'Upcoming')
+  || sorted[0]
+);
+
+const STATUS_BADGE = {
+  Ongoing: { label: 'Today', className: 'eco-badge-amber' },
+  Upcoming: { label: 'Upcoming', className: 'eco-badge-blue' },
+  Completed: { label: 'Completed', className: 'eco-badge-green' },
+};
+
 function ParticipationRecordView() {
   const [activities, setActivities] = useState([]);
   const [selectedActivity, setSelectedActivity] = useState('');
+  const [listFilter, setListFilter] = useState('All');
+  const [listSearch, setListSearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const loadActivities = async () => {
       try {
-        const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
+        const organizerInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
         const response = await fetch(`${API_BASE_URL}/api/activities`, {
-          headers: { Authorization: `Bearer ${adminInfo.token}` },
+          headers: { Authorization: `Bearer ${organizerInfo.token}` },
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load activities');
-        setActivities(data);
-        setSelectedActivity(data[0]?._id || '');
+        const sorted = sortForAttendance(data);
+        setActivities(sorted);
+        setSelectedActivity(pickDefaultActivity(sorted)?._id || '');
       } catch (requestError) {
         setError(requestError.message);
       } finally {
@@ -2024,156 +2081,282 @@ function ParticipationRecordView() {
 
   useEffect(() => {
     if (!selectedActivity) return;
+    let cancelled = false;
 
     const loadParticipants = async () => {
+      setLoadingParticipants(true);
       try {
-        const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
+        const organizerInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
         const response = await fetch(`${API_BASE_URL}/api/participation/activity/${selectedActivity}`, {
-          headers: { Authorization: `Bearer ${adminInfo.token}` },
+          headers: { Authorization: `Bearer ${organizerInfo.token}` },
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load participation records');
+        if (cancelled) return;
         setParticipants(data);
+        // Keep the list's progress in sync with the real records.
+        setActivities((current) => current.map((a) => (
+          a._id === selectedActivity ? { ...a, attendance: summarizeParticipants(data) } : a
+        )));
       } catch (requestError) {
-        setError(requestError.message);
+        if (!cancelled) setError(requestError.message);
+      } finally {
+        if (!cancelled) setLoadingParticipants(false);
       }
     };
 
+    setSearchTerm('');
     loadParticipants();
+    return () => { cancelled = true; };
   }, [selectedActivity]);
 
   const handleAttendanceChange = async (id, newStatus) => {
     try {
-      const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
+      const organizerInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
       const response = await fetch(`${API_BASE_URL}/api/participation/${id}/attendance`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminInfo.token}`,
+          Authorization: `Bearer ${organizerInfo.token}`,
         },
         body: JSON.stringify({ attendance: newStatus.toLowerCase() }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to update attendance');
-      setParticipants((current) => current.map((participant) => (
-        participant._id === id ? data : participant
+      const updated = participants.map((participant) => (participant._id === id ? data : participant));
+      setParticipants(updated);
+      setActivities((current) => current.map((a) => (
+        a._id === selectedActivity ? { ...a, attendance: summarizeParticipants(updated) } : a
       )));
     } catch (requestError) {
       alert(requestError.message);
     }
   };
 
+  if (loading) return <div className="eco-card mx-auto h-96 max-w-6xl animate-pulse bg-white/70" />;
+  if (error) return <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>;
+
+  if (activities.length === 0) {
+    return (
+      <div className="eco-card mx-auto max-w-6xl">
+        <div className="eco-empty py-16">
+          <BookOpen className="h-6 w-6 text-eco-400" />
+          You haven't created any activities yet. Attendance will show up here once volunteers join.
+        </div>
+      </div>
+    );
+  }
+
+  const filterCounts = {
+    All: activities.length,
+    'Needs attendance': activities.filter(needsAttendance).length,
+    Today: activities.filter((a) => getActivityStatus(a.date) === 'Ongoing').length,
+    Upcoming: activities.filter((a) => getActivityStatus(a.date) === 'Upcoming').length,
+    Completed: activities.filter((a) => getActivityStatus(a.date) === 'Completed').length,
+  };
+
+  const listQuery = listSearch.trim().toLowerCase();
+  const visibleActivities = activities.filter((a) => {
+    const status = getActivityStatus(a.date);
+    const matchesFilter = listFilter === 'All'
+      || (listFilter === 'Needs attendance' && needsAttendance(a))
+      || (listFilter === 'Today' && status === 'Ongoing')
+      || listFilter === status;
+    return matchesFilter && `${a.title} ${a.location}`.toLowerCase().includes(listQuery);
+  });
+
   const filteredParticipants = participants.filter((p) =>
     (p.user?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalRegistered = participants.length;
-  const totalPresent = participants.filter((p) => p.attendance === 'present').length;
-  const totalAbsent = participants.filter((p) => p.attendance === 'absent').length;
+  const totals = summarizeParticipants(participants);
+  const attended = totals.present + totals.late;
+  const attendanceRate = totals.total > 0 ? Math.round((attended / totals.total) * 100) : 0;
   const activeActivity = activities.find((activity) => activity._id === selectedActivity);
-
-  if (loading) return <div className="eco-card mx-auto h-96 max-w-6xl animate-pulse bg-white/70" />;
-  if (error) return <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>;
+  const activeStatus = activeActivity ? getActivityStatus(activeActivity.date) : null;
 
   const attendanceStyles = {
     present: 'bg-eco-50 text-eco-800 border-eco-200',
     absent: 'bg-rose-50 text-rose-800 border-rose-200',
     late: 'bg-amber-50 text-amber-800 border-amber-200',
   };
-  const attendanceRate = totalRegistered > 0 ? Math.round((totalPresent / totalRegistered) * 100) : 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 text-slate-800">
-      {/* Overview Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatTile label="Total registered" value={totalRegistered} icon={Users} />
-        <StatTile label="Present" value={totalPresent} icon={UserCheck} hint={`${attendanceRate}% attendance rate`} />
-        <StatTile label="Absent" value={totalAbsent} icon={UserX} />
+      {/* Overview Stat Cards (for the selected activity) */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile label="Registered" value={totals.total} icon={Users} />
+        <StatTile label="Attended" value={attended} icon={UserCheck} hint={`${attendanceRate}% rate${totals.late ? ` · ${totals.late} late` : ''}`} />
+        <StatTile label="Absent" value={totals.absent} icon={UserX} />
+        <StatTile label="Not marked" value={totals.unmarked} icon={Hourglass} hint={totals.unmarked > 0 && activeStatus !== 'Upcoming' ? 'Mark these volunteers' : undefined} />
       </div>
 
-      {/* Main Participation Table */}
-      <div className="eco-card overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-eco-100 bg-gradient-to-r from-eco-50/80 to-white p-5">
-          <div className="min-w-0">
-            <div className="relative inline-flex items-center">
-              <select
-                value={selectedActivity}
-                onChange={(e) => setSelectedActivity(e.target.value)}
-                aria-label="Select activity"
-                className="eco-input cursor-pointer appearance-none py-2 pr-10 text-base font-extrabold text-slate-800"
-              >
-                {activities.map((activity) => (
-                  <option key={activity._id} value={activity._id}>{activity.title}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-eco-600" />
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
+        {/* Activity list */}
+        <div className="eco-card overflow-hidden lg:sticky lg:top-0 lg:col-span-4">
+          <div className="space-y-3 border-b border-eco-100 p-4">
+            <h3 className="eco-section-title">
+              <span className="eco-icon-tile h-8 w-8 rounded-lg"><FolderOpen className="h-[15px] w-[15px]" /></span>
+              My Activities
+            </h3>
+            <div className="flex items-center gap-2 rounded-xl border border-eco-100 bg-eco-50/50 px-3 py-2">
+              <Search className="h-4 w-4 text-eco-600" />
+              <input
+                value={listSearch}
+                onChange={(e) => setListSearch(e.target.value)}
+                placeholder="Search activities..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+              />
             </div>
-            <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
-              <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5 text-eco-600" /> {activeActivity?.date ? new Date(activeActivity.date).toLocaleDateString() : '-'}</span>
-              <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-eco-600" /> {activeActivity?.location || '-'}</span>
-            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {LIST_FILTERS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setListFilter(key)}
+                  className={`eco-chip px-2.5 py-1 text-[11px] ${listFilter === key ? 'eco-chip-active' : ''}`}
+                >
+                  {key}
+                  <span className={`ml-1 rounded-full px-1.5 text-[10px] ${key === 'Needs attendance' && filterCounts[key] > 0 && listFilter !== key ? 'bg-amber-100 text-amber-800' : 'opacity-70'}`}>
+                    {filterCounts[key]}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex w-full items-center gap-2 rounded-xl border border-eco-100 bg-white px-3.5 py-2.5 text-slate-700 transition focus-within:border-eco-400 focus-within:ring-4 focus-within:ring-eco-200/40 sm:w-72">
-            <Search className="h-4 w-4 text-eco-600" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search participants..."
-              className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-            />
-          </div>
+          <ul className="eco-scroll max-h-72 divide-y divide-eco-100 overflow-y-auto lg:max-h-[560px]">
+            {visibleActivities.map((activity) => {
+              const status = getActivityStatus(activity.date);
+              const badge = STATUS_BADGE[status];
+              const summary = getAttendanceSummary(activity);
+              const marked = summary.unmarked === null ? null : summary.total - summary.unmarked;
+              const progress = summary.total > 0 && marked !== null ? Math.round((marked / summary.total) * 100) : 0;
+              const isSelected = activity._id === selectedActivity;
+              return (
+                <li key={activity._id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedActivity(activity._id)}
+                    className={`relative w-full px-4 py-3 text-left transition ${isSelected ? 'bg-eco-50' : 'hover:bg-eco-50/50'}`}
+                  >
+                    {isSelected && <span className="absolute inset-y-0 left-0 w-1 bg-eco-600" />}
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`min-w-0 truncate text-sm font-bold ${isSelected ? 'text-eco-800' : 'text-slate-800'}`}>{activity.title}</p>
+                      <span className={`eco-badge ${badge.className} shrink-0`}>{badge.label}</span>
+                    </div>
+                    <p className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(activity.date).toLocaleDateString()}</span>
+                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{summary.total} / {activity.volunteerLimit}</span>
+                    </p>
+                    {summary.total > 0 && marked !== null && status !== 'Upcoming' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className={`h-full rounded-full transition-all ${progress === 100 ? 'bg-eco-600' : 'bg-amber-500'}`}
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <span className={`text-[10px] font-bold ${progress === 100 ? 'text-eco-700' : 'text-amber-700'}`}>
+                          {marked} of {summary.total} marked
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+            {visibleActivities.length === 0 && (
+              <li className="px-4 py-10 text-center text-xs text-slate-400">
+                {listFilter === 'Needs attendance' && !listQuery ? 'All caught up! Every volunteer is marked.' : 'No activities match.'}
+              </li>
+            )}
+          </ul>
         </div>
 
-        <div className="eco-scroll overflow-x-auto p-3">
-          <table className="eco-table min-w-[560px]">
-            <thead>
-              <tr>
-                <th>Registered Participant</th>
-                <th>Date Joined</th>
-                <th>Attendance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredParticipants.length > 0 ? (
-                filteredParticipants.map((p) => (
-                  <tr key={p._id}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <span className="eco-avatar h-8 w-8 text-[11px]">{getInitials(p.user?.name)}</span>
-                        <span className="font-bold text-slate-800">{p.user?.name}</span>
-                      </div>
-                    </td>
-                    <td className="text-slate-500">{p.joinedAt ? new Date(p.joinedAt).toLocaleDateString() : '-'}</td>
-                    <td>
-                      <div className="relative inline-block w-36">
-                        <select
-                          value={p.attendance || ''}
-                          onChange={(e) => handleAttendanceChange(p._id, e.target.value)}
-                          className={`w-full cursor-pointer appearance-none rounded-xl border px-3 py-2 text-xs font-bold outline-none transition focus:ring-4 focus:ring-eco-200/50 ${
-                            attendanceStyles[p.attendance] || 'border-slate-200 bg-slate-50 text-slate-600'
-                          }`}
-                        >
-                          {!p.attendance && <option value="" disabled>Not marked</option>}
-                          <option value="present">Present</option>
-                          <option value="absent">Absent</option>
-                          <option value="late">Late</option>
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
-                      </div>
+        {/* Participants table */}
+        <div className="eco-card overflow-hidden lg:col-span-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-eco-100 bg-gradient-to-r from-eco-50/80 to-white p-5">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-extrabold text-slate-800 [overflow-wrap:anywhere]">{activeActivity?.title}</h3>
+                {activeStatus && <span className={`eco-badge ${STATUS_BADGE[activeStatus].className}`}>{STATUS_BADGE[activeStatus].label}</span>}
+              </div>
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
+                <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5 text-eco-600" /> {activeActivity?.date ? new Date(activeActivity.date).toLocaleDateString() : '-'}{activeActivity?.time ? ` · ${activeActivity.time}` : ''}</span>
+                <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-eco-600" /> {activeActivity?.location || '-'}</span>
+              </p>
+            </div>
+
+            <div className="flex w-full items-center gap-2 rounded-xl border border-eco-100 bg-white px-3.5 py-2.5 text-slate-700 transition focus-within:border-eco-400 focus-within:ring-4 focus-within:ring-eco-200/40 sm:w-64">
+              <Search className="h-4 w-4 text-eco-600" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search participants..."
+                className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+              />
+            </div>
+          </div>
+
+          {activeStatus === 'Upcoming' && participants.length > 0 && (
+            <p className="mx-5 mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-semibold text-sky-800">
+              This activity hasn't happened yet. You can mark attendance on the day.
+            </p>
+          )}
+
+          <div className="eco-scroll overflow-x-auto p-3">
+            <table className="eco-table min-w-[560px]">
+              <thead>
+                <tr>
+                  <th>Registered Participant</th>
+                  <th>Date Joined</th>
+                  <th>Attendance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingParticipants && participants.length === 0 ? (
+                  <tr><td colSpan={3} className="py-10"><div className="mx-auto h-4 w-40 animate-pulse rounded bg-slate-200" /></td></tr>
+                ) : filteredParticipants.length > 0 ? (
+                  filteredParticipants.map((p) => (
+                    <tr key={p._id} className={loadingParticipants ? 'opacity-50' : ''}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <span className="eco-avatar h-8 w-8 text-[11px]">{getInitials(p.user?.name)}</span>
+                          <span className="font-bold text-slate-800">{p.user?.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-slate-500">{p.joinedAt ? new Date(p.joinedAt).toLocaleDateString() : '-'}</td>
+                      <td>
+                        <div className="relative inline-block w-36">
+                          <select
+                            value={p.attendance || ''}
+                            onChange={(e) => handleAttendanceChange(p._id, e.target.value)}
+                            className={`w-full cursor-pointer appearance-none rounded-xl border px-3 py-2 text-xs font-bold outline-none transition focus:ring-4 focus:ring-eco-200/50 ${
+                              attendanceStyles[p.attendance] || 'border-slate-200 bg-slate-50 text-slate-600'
+                            }`}
+                          >
+                            {!p.attendance && <option value="" disabled>Not marked</option>}
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                            <option value="late">Late</option>
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="py-10 text-center text-slate-400">
+                      {participants.length === 0 ? 'No volunteers have joined this activity yet.' : 'No participants found.'}
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="py-10 text-center text-slate-400">
-                    No participants found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
