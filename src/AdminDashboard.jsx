@@ -1233,6 +1233,121 @@ function ActivityOversightView() {
 }
 
 /* ==========================================
+   REPORTED ACTIVITY DETAILS (opened from Reports)
+   Uses GET /api/activities, which already returns full details for admins.
+   ========================================== */
+const getActivityImageUrl = (image) => (
+  image?.startsWith('/uploads/') ? `${API_BASE_URL}${image}` : image
+);
+
+function ActivityDetailsModal({ activityId, onClose, footer }) {
+  const [activity, setActivity] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    adminFetch('/api/activities')
+      .then((list) => {
+        if (cancelled) return;
+        const found = list.find((item) => item._id === activityId);
+        if (found) setActivity(found);
+        else setError('This activity no longer exists.');
+      })
+      .catch((requestError) => !cancelled && setError(requestError.message));
+    return () => { cancelled = true; };
+  }, [activityId]);
+
+  const organizer = activity?.organizer;
+  const participants = activity?.participants || [];
+  const image = getActivityImageUrl(activity?.coverImage);
+
+  return (
+    <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 text-slate-800">
+      <div className="absolute inset-0" onClick={onClose} />
+      <div className="ecotask-modal-panel eco-modal eco-scroll relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto">
+        <div className="relative h-44 bg-gradient-to-r from-eco-700 via-eco-600 to-eco-400">
+          {image && <img src={image} alt="" className="h-full w-full object-cover" />}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+          <button type="button" onClick={onClose} aria-label="Close" className="absolute right-3 top-3 rounded-full bg-black/30 p-1.5 text-white transition hover:bg-black/50">
+            <X className="h-4 w-4" />
+          </button>
+          {activity && (
+            <div className="absolute inset-x-0 bottom-0 p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="eco-badge eco-badge-green capitalize">{activity.status || getActivityStatus(activity.date)}</span>
+                {activity.isHidden && <span className="eco-badge eco-badge-red">Hidden</span>}
+                {activity.hiddenBySuspension && <span className="eco-badge eco-badge-gray">Organizer suspended</span>}
+              </div>
+              <h3 className="mt-1.5 text-xl font-extrabold text-white [overflow-wrap:anywhere]">{activity.title}</h3>
+            </div>
+          )}
+        </div>
+
+        {!activity && !error && <div className="h-72 animate-pulse" />}
+        {error && <p className="m-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
+
+        {activity && (
+          <div className="space-y-5 p-6">
+            {activity.isHidden && activity.hiddenReason && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+                <p className="font-bold">Hidden from volunteers</p>
+                <p className="mt-0.5 [overflow-wrap:anywhere]">{activity.hiddenReason}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-2.5 text-xs sm:grid-cols-2">
+              {[
+                { icon: Building2, label: 'Organizer', value: organizer?.organizationName || organizer?.name || 'Unassigned' },
+                { icon: Calendar, label: 'Date & time', value: `${new Date(activity.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}${activity.time ? ` · ${activity.time}` : ''}` },
+                { icon: Home, label: 'Location', value: activity.location || '—' },
+                { icon: Flag, label: 'Meeting place', value: activity.meetingPlace || '—' },
+                { icon: Users, label: 'Volunteers', value: `${participants.length} / ${activity.volunteerLimit}` },
+                { icon: Clock, label: 'Created', value: activity.createdAt ? new Date(activity.createdAt).toLocaleString() : '—' },
+              ].map(({ icon: Icon, label, value }) => (
+                <div key={label} className="flex items-start gap-2.5 rounded-xl border border-eco-100 bg-eco-50/50 px-3 py-2.5">
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-eco-600" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                    <p className="mt-0.5 font-semibold text-slate-700 [overflow-wrap:anywhere]">{value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <p className="eco-label">Description</p>
+              <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600 [overflow-wrap:anywhere]">{activity.description}</p>
+            </div>
+
+            <div>
+              <p className="eco-label">Joined volunteers ({participants.length})</p>
+              {participants.length > 0 ? (
+                <ul className="eco-scroll max-h-48 divide-y divide-eco-100 overflow-y-auto rounded-xl border border-eco-100">
+                  {participants.map((person) => (
+                    <li key={person._id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
+                      <span className="font-semibold text-slate-700">{person.name}</span>
+                      <span className="text-slate-500">{person.email}{person.phone ? ` · ${person.phone}` : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-400">No volunteers have joined yet.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activity && footer && (
+          <div className="flex flex-wrap justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-6 py-4">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================
    REPORTS VIEW
    ========================================== */
 function ReportsView() {
@@ -1245,6 +1360,8 @@ function ReportsView() {
   const [notice, setNotice] = useState('');
   // { type: 'dismiss' | 'dismiss-all' | 'hide', group, report? }
   const [action, setAction] = useState(null);
+  // Group whose activity details are open in the details card.
+  const [detailsGroup, setDetailsGroup] = useState(null);
 
   const load = async (status) => {
     setLoading(true);
@@ -1423,8 +1540,12 @@ function ReportsView() {
                 </button>
 
                 {/* Activity-level actions */}
-                {group.openReports.length > 0 && activity && (
+                {activity && (
                   <div className="flex flex-wrap justify-end gap-2 border-t border-eco-100 px-5 py-3">
+                    <button type="button" onClick={() => setDetailsGroup(group)} className="eco-btn eco-btn-secondary eco-btn-sm mr-auto">
+                      <Eye className="h-3.5 w-3.5" /> View activity details
+                    </button>
+                    {group.openReports.length > 0 && (<>
                     <button type="button" onClick={() => setAction({ type: 'dismiss-all', group })} className="eco-btn eco-btn-secondary eco-btn-sm">
                       Dismiss all ({group.openReports.length})
                     </button>
@@ -1433,6 +1554,7 @@ function ReportsView() {
                         Hide activity
                       </button>
                     )}
+                    </>)}
                   </div>
                 )}
 
@@ -1484,6 +1606,25 @@ function ReportsView() {
             </div>
           )}
         </div>
+      )}
+
+      {detailsGroup && (
+        <ActivityDetailsModal
+          activityId={detailsGroup.activity._id}
+          onClose={() => setDetailsGroup(null)}
+          footer={detailsGroup.openReports.length > 0 && (
+            <>
+              <button type="button" onClick={() => { setAction({ type: 'dismiss-all', group: detailsGroup }); setDetailsGroup(null); }} className="eco-btn eco-btn-secondary eco-btn-sm">
+                Dismiss all ({detailsGroup.openReports.length})
+              </button>
+              {!detailsGroup.activity.isHidden && (
+                <button type="button" onClick={() => { setAction({ type: 'hide', group: detailsGroup }); setDetailsGroup(null); }} className="eco-btn eco-btn-danger-soft eco-btn-sm">
+                  Hide activity
+                </button>
+              )}
+            </>
+          )}
+        />
       )}
 
       {action && (
@@ -2297,27 +2438,65 @@ function AnnouncementsView() {
     }
   };
 
-  const handleEdit = async (announcement) => {
-    const title = window.prompt('Announcement title', announcement.title);
-    if (!title) return;
-    const description = window.prompt('Description', announcement.description || announcement.message || '');
-    if (description === null) return;
+  // Edit card state: null when closed, otherwise the announcement being edited.
+  const [editing, setEditing] = useState(null);
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const handleEdit = (announcement) => {
+    setEditError('');
+    setEditing({
+      _id: announcement._id,
+      title: announcement.title || '',
+      category: announcement.category || '',
+      description: announcement.description || announcement.message || '',
+    });
+  };
+
+  const closeEdit = () => {
+    if (savingEdit) return;
+    setEditing(null);
+    setEditError('');
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditing((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    const title = editing.title.trim();
+    const description = editing.description.trim();
+    if (!title || !description) {
+      setEditError('Please fill in both the title and message.');
+      return;
+    }
 
     try {
+      setSavingEdit(true);
       const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-      const response = await fetch(`${API_BASE_URL}/api/announcements/${announcement._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/announcements/${editing._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminInfo.token}`,
         },
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({
+          title,
+          category: editing.category.trim() || 'General',
+          description,
+          message: description,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to edit announcement');
       setAnnouncements((current) => current.map((item) => item._id === data._id ? data : item));
+      setEditing(null);
     } catch (requestError) {
-      setNotification(requestError.message);
+      setEditError(requestError.message);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -2326,6 +2505,7 @@ function AnnouncementsView() {
   const isSuccess = notification === 'Announcement posted successfully!';
 
   return (
+    <>
     <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-6 text-slate-800 lg:grid-cols-12">
       {/* Creation Card */}
       <div className="eco-card overflow-hidden lg:sticky lg:top-0 lg:col-span-5">
@@ -2469,6 +2649,92 @@ function AnnouncementsView() {
         </div>
       </div>
     </div>
+
+    {/* Edit Announcement Card */}
+    {editing && (
+      <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 text-slate-800">
+        <div className="absolute inset-0" onClick={closeEdit} />
+        <form
+          onSubmit={handleSaveEdit}
+          className="ecotask-modal-panel eco-modal eco-scroll relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto"
+        >
+          <div className="flex items-center justify-between border-b border-eco-100 px-5 py-4">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-eco-50 text-eco-700">
+                <Edit3 className="h-4 w-4" />
+              </span>
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800">Edit Announcement</h3>
+            </div>
+            <button type="button" onClick={closeEdit} aria-label="Close" className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-4 p-5">
+            {editError && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                <Bell className="h-4 w-4 shrink-0" />
+                {editError}
+              </div>
+            )}
+            <div>
+              <label className="eco-label">Title</label>
+              <input
+                type="text"
+                name="title"
+                value={editing.title}
+                onChange={handleEditChange}
+                className="eco-input"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="eco-label">Category</label>
+              <input
+                type="text"
+                name="category"
+                value={editing.category}
+                onChange={handleEditChange}
+                placeholder="e.g. Important, Organizer Updates"
+                className="eco-input"
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {['Important', 'Organizer Updates', 'General'].map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setEditing((prev) => ({ ...prev, category }))}
+                    className={`eco-chip px-2.5 py-1 text-[11px] ${editing.category === category ? 'eco-chip-active' : ''}`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="eco-label">Message</label>
+              <textarea
+                rows={5}
+                name="description"
+                value={editing.description}
+                onChange={handleEditChange}
+                className="eco-input resize-y"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-5 py-4">
+            <button type="button" onClick={closeEdit} disabled={savingEdit} className="eco-btn eco-btn-danger-soft">
+              Cancel
+            </button>
+            <button type="submit" disabled={savingEdit} className="eco-btn eco-btn-primary">
+              <CheckCircle2 className="h-4 w-4" /> {savingEdit ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
+    </>
   );
 }
 

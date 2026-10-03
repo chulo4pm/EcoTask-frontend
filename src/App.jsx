@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Check,
   Leaf,
@@ -1006,6 +1006,30 @@ const readResetFrom = () => {
   try { return sessionStorage.getItem(RESET_FROM_KEY) || "login"; } catch { return "login"; }
 };
 
+/* =========================================================
+   PAGE TRANSITION CURTAIN
+========================================================= */
+
+const CURTAIN_IN_MS = 420;
+const CURTAIN_OUT_MS = 480;
+
+function PageCurtain({ phase }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`ecotask-curtain ecotask-curtain-${phase} fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#00140d] via-[#075f2b] to-[#16a34a]`}
+    >
+      <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-green-400/20 blur-3xl" />
+      <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-emerald-300/20 blur-3xl" />
+      <div className="ecotask-curtain-logo relative flex flex-col items-center gap-4">
+        <EcoTaskLogo light />
+        <Leaf className="ecotask-curtain-leaf text-green-300" size={26} />
+      </div>
+    </div>
+  );
+}
+
+
 function App() {
   const [page, setPage] = useState(getInitialPage);
 
@@ -1013,6 +1037,30 @@ function App() {
   useEffect(() => {
     try { sessionStorage.setItem(PAGE_KEY, page); } catch { /* private mode */ }
   }, [page]);
+
+  // Page transition: a green curtain slides up, the page switches behind it,
+  // then the curtain slides away. phase: null | "in" | "out"
+  const [curtain, setCurtain] = useState(null);
+  const timers = useRef([]);
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const goTo = (next) => {
+    if (next === page) return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion || curtain) {
+      setPage(next);
+      window.scrollTo(0, 0);
+      return;
+    }
+    setCurtain("in");
+    timers.current.push(setTimeout(() => {
+      setPage(next);
+      window.scrollTo(0, 0);
+      setCurtain("out");
+    }, CURTAIN_IN_MS));
+    timers.current.push(setTimeout(() => setCurtain(null), CURTAIN_IN_MS + CURTAIN_OUT_MS));
+  };
   const [userEmail, setUserEmail] = useState("");
 
   // Forgot password: the code confirmed on "Check Your Email",
@@ -1030,30 +1078,31 @@ function App() {
   // Log out: delete the saved token so it can't be reused, then go home.
   const logoutVolunteer = () => {
     localStorage.removeItem("userInfo");
-    setPage("landing");
+    goTo("landing");
   };
 
   const logoutAdmin = () => {
     localStorage.removeItem("adminInfo");
-    setPage("landing");
+    goTo("landing");
   };
 
   const logoutOrganizer = () => {
     localStorage.removeItem("organizerInfo");
-    setPage("landing");
+    goTo("landing");
   };
 
+  const content = (() => {
   /* ORGANIZER PAGES */
 
   if (page === "organizer-login") {
     return (
       <OrganizerLogin
-        onBack={() => setPage("landing")}
-        onRegister={() => setPage("organizer-register")}
-        onLogin={() => setPage("organizer")}
+        onBack={() => goTo("landing")}
+        onRegister={() => goTo("organizer-register")}
+        onLogin={() => goTo("organizer")}
         onForgotPassword={() => {
           setResetFrom("organizer-login");
-          setPage("forgot-password");
+          goTo("forgot-password");
         }}
       />
     );
@@ -1062,15 +1111,15 @@ function App() {
   if (page === "organizer-register") {
     return (
       <OrganizerRegister
-        onBack={() => setPage("landing")}
-        onLogin={() => setPage("organizer-login")}
-        onRegistered={() => setPage("organizer-submitted")}
+        onBack={() => goTo("landing")}
+        onLogin={() => goTo("organizer-login")}
+        onRegistered={() => goTo("organizer-submitted")}
       />
     );
   }
 
   if (page === "organizer-submitted") {
-    return <OrganizerSubmitted onBack={() => setPage("organizer-login")} />;
+    return <OrganizerSubmitted onBack={() => goTo("organizer-login")} />;
   }
 
   if (page === "organizer") {
@@ -1090,10 +1139,10 @@ function App() {
     return (
       <AdminLogin
         onBack={() => {
-          setPage("landing");
+          goTo("landing");
         }}
         onAdminLogin={() => {
-          setPage("admin");
+          goTo("admin");
         }}
       />
     );
@@ -1117,17 +1166,17 @@ function App() {
     return (
       <Login
         onBack={() => {
-          setPage("landing");
+          goTo("landing");
         }}
         onRegister={() => {
-          setPage("register");
+          goTo("register");
         }}
         onLogin={() => {
-          setPage("dashboard");
+          goTo("dashboard");
         }}
         onForgotPassword={() => {
           setResetFrom("login");
-          setPage("forgot-password");
+          goTo("forgot-password");
         }}
       />
     );
@@ -1140,13 +1189,13 @@ function App() {
     return (
       <Register
         onBack={() => {
-          setPage("landing");
+          goTo("landing");
         }}
         onLogin={() => {
-          setPage("login");
+          goTo("login");
         }}
         onRegister={() => {
-          setPage("registration-submitted");
+          goTo("registration-submitted");
         }}
       />
     );
@@ -1158,7 +1207,7 @@ function App() {
     return (
       <RegistrationSubmitted
         onBack={() => {
-          setPage("login");
+          goTo("login");
         }}
       />
     );
@@ -1171,12 +1220,12 @@ function App() {
     return (
       <ForgotPassword
         onBack={() => {
-          setPage(resetFrom);
+          goTo(resetFrom);
         }}
         onSendCode={(email) => {
           setUserEmail(email);
           setResetCode("");
-          setPage("verification-code");
+          goTo("verification-code");
         }}
       />
     );
@@ -1190,11 +1239,11 @@ function App() {
       <VerifyResetCode
         email={userEmail}
         onBack={() => {
-          setPage("forgot-password");
+          goTo("forgot-password");
         }}
         onVerified={(code) => {
           setResetCode(code);
-          setPage("reset-password");
+          goTo("reset-password");
         }}
       />
     );
@@ -1209,11 +1258,11 @@ function App() {
         email={userEmail}
         code={resetCode}
         onBack={() => {
-          setPage("verification-code");
+          goTo("verification-code");
         }}
         onResetSuccess={() => {
           setResetCode("");
-          setPage("password-success");
+          goTo("password-success");
         }}
       />
     );
@@ -1226,7 +1275,7 @@ function App() {
     return (
       <PasswordResetSuccess
         onBackToLogin={() => {
-          setPage(resetFrom);
+          goTo(resetFrom);
         }}
       />
     );
@@ -1238,18 +1287,28 @@ function App() {
   return (
     <LandingPage
       onGetStarted={() => {
-        setPage("register");
+        goTo("register");
       }}
       onLogin={() => {
-        setPage("login");
+        goTo("login");
       }}
       onAdmin={() => {
-        setPage("admin-login");
+        goTo("admin-login");
       }}
       onOrganizer={() => {
-        setPage("organizer-login");
+        goTo("organizer-login");
       }}
     />
+  );
+  })();
+
+  return (
+    <>
+      <div key={page} className="ecotask-route-fade">
+        {content}
+      </div>
+      {curtain && <PageCurtain phase={curtain} />}
+    </>
   );
 }
 

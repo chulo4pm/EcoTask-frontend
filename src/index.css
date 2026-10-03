@@ -735,3 +735,44 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* =========================================
+   PAGE TRANSITION (App.jsx → PageCurtain)
+========================================= */
+
+@keyframes ecotask-curtain-in {
+  from { transform: translateY(100%); border-radius: 50% 50% 0 0 / 12% 12% 0 0; }
+  to { transform: translateY(0); border-radius: 0; }
+}
+
+@keyframes ecotask-curtain-out {
+  from { transform: translateY(0); border-radius: 0; }
+  to { transform: translateY(-100%); border-radius: 0 0 50% 50% / 0 0 12% 12%; }
+}
+
+@keyframes ecotask-leaf-spin {
+  from { transform: rotate(0deg) scale(0.9); }
+  50% { transform: rotate(180deg) scale(1.1); }
+  to { transform: rotate(360deg) scale(0.9); }
+}
+
+.ecotask-curtain-in {
+  animation: ecotask-curtain-in 420ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.ecotask-curtain-out {
+  animation: ecotask-curtain-out 480ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.ecotask-curtain-logo {
+  animation: ecotask-pop 360ms 120ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.ecotask-curtain-leaf {
+  animation: ecotask-leaf-spin 900ms ease-in-out infinite;
+}
+
+/* New page fades in as the curtain leaves (opacity only, so fixed overlays keep working). */
+.ecotask-route-fade {
+  animation: ecotask-modal-backdrop 500ms ease-out backwards;
+}
