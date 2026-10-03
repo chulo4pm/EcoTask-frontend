@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Check,
   Leaf,
@@ -971,8 +971,48 @@ function OrganizerSubmitted({ onBack }) {
    MAIN APP
 ========================================================= */
 
+/* =========================================================
+   REMEMBER THE CURRENT PAGE (survives a browser refresh)
+========================================================= */
+
+const PAGE_KEY = "ecotaskPage";
+const RESET_FROM_KEY = "ecotaskResetFrom";
+
+// Dashboards need a saved login; without one, refresh goes to the landing page.
+const DASHBOARD_AUTH = {
+  dashboard: "userInfo",
+  admin: "adminInfo",
+  organizer: "organizerInfo",
+};
+
+const isLoggedIn = (storageKey) => {
+  try {
+    return Boolean(JSON.parse(localStorage.getItem(storageKey) || "{}").token);
+  } catch {
+    return false;
+  }
+};
+
+const getInitialPage = () => {
+  let saved = "";
+  try { saved = sessionStorage.getItem(PAGE_KEY) || ""; } catch { /* private mode */ }
+  if (!saved) return "landing";
+  const authKey = DASHBOARD_AUTH[saved];
+  if (authKey && !isLoggedIn(authKey)) return "landing";
+  return saved;
+};
+
+const readResetFrom = () => {
+  try { return sessionStorage.getItem(RESET_FROM_KEY) || "login"; } catch { return "login"; }
+};
+
 function App() {
-  const [page, setPage] = useState("landing");
+  const [page, setPage] = useState(getInitialPage);
+
+  // Save the page every time it changes, so a refresh reopens it.
+  useEffect(() => {
+    try { sessionStorage.setItem(PAGE_KEY, page); } catch { /* private mode */ }
+  }, [page]);
   const [userEmail, setUserEmail] = useState("");
 
   // Forgot password: the code confirmed on "Check Your Email",
@@ -981,7 +1021,11 @@ function App() {
 
   // Which login page started "Forgot Password" ("login" or "organizer-login"),
   // so the reset pages send the user back to the right one.
-  const [resetFrom, setResetFrom] = useState("login");
+  const [resetFrom, setResetFrom] = useState(readResetFrom);
+
+  useEffect(() => {
+    try { sessionStorage.setItem(RESET_FROM_KEY, resetFrom); } catch { /* private mode */ }
+  }, [resetFrom]);
 
   // Log out: delete the saved token so it can't be reused, then go home.
   const logoutVolunteer = () => {

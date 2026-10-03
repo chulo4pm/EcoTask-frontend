@@ -25,3 +25,6 @@ dist-ssr
 
 # Kilo editor worktrees
 .kilo/
+
+.env
+*.bak
