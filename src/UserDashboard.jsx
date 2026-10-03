@@ -79,6 +79,7 @@ import {
   XCircle,
   Flag,
   Building2,
+  Lock,
 } from 'lucide-react'
 import { API_BASE_URL } from "./config";
 
@@ -2142,6 +2143,8 @@ function SettingsPage({ onProfileUpdated }) {
       newPassword: '',
       confirmPassword: '',
     })
+    setFormError('')
+    setNotice('')
     setIsEditing(true)
   }
 
@@ -2151,20 +2154,54 @@ function SettingsPage({ onProfileUpdated }) {
       newPassword: '',
       confirmPassword: '',
     })
+    setFormError('')
     setIsEditing(false)
   }
 
+  // Save confirmation: the volunteer must type their current password.
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [saveError, setSaveError] = useState('')
+  const [formError, setFormError] = useState('')
+  const [notice, setNotice] = useState('')
+
   const handleSaveClick = () => {
-    if (formState.newPassword !== formState.confirmPassword) {
-      alert('Passwords do not match. Please try again.')
+    setNotice('')
+    const name = formState.fullName.trim()
+    const phone = formState.phoneNumber.trim()
+    if (!name) {
+      setFormError('Full name is required.')
       return
     }
+    if (formState.newPassword !== formState.confirmPassword) {
+      setFormError('New passwords do not match. Please try again.')
+      return
+    }
+    if (name === profile.fullName && phone === profile.phoneNumber && !formState.newPassword) {
+      setFormError('No changes to save.')
+      return
+    }
+    setFormError('')
+    setSaveError('')
+    setCurrentPassword('')
     setShowSaveModal(true)
   }
 
-  const handleConfirmSave = async () => {
+  const closeSaveModal = () => {
+    if (saving) return
+    setShowSaveModal(false)
+    setCurrentPassword('')
+    setSaveError('')
+  }
+
+  const handleConfirmSave = async (e) => {
+    e?.preventDefault()
+    if (!currentPassword) {
+      setSaveError('Enter your current password.')
+      return
+    }
     try {
       setSaving(true)
+      setSaveError('')
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
       const response = await fetch(`${API_BASE_URL}/api/users/me`, {
         method: 'PATCH',
@@ -2173,27 +2210,41 @@ function SettingsPage({ onProfileUpdated }) {
           Authorization: `Bearer ${userInfo.token}`,
         },
         body: JSON.stringify({
-          name: formState.fullName,
-          phone: formState.phoneNumber,
-          email: formState.email,
+          currentPassword,
+          name: formState.fullName.trim(),
+          phone: formState.phoneNumber.trim(),
           newPassword: formState.newPassword || undefined,
         }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.message || 'Unable to save profile')
+      if (!response.ok) {
+        // Wrong current password stays in the dialog; other problems go back to the form.
+        if (data.errors?.currentPassword || response.status === 429) {
+          setSaveError(data.message || 'Unable to save profile')
+          return
+        }
+        setShowSaveModal(false)
+        setFormError(data.message || 'Unable to save profile')
+        return
+      }
 
-      setProfile({
-      fullName: formState.fullName,
-      phoneNumber: formState.phoneNumber,
-      email: formState.email,
-      })
-      localStorage.setItem('userInfo', JSON.stringify({ ...userInfo, ...data }))
-      onProfileUpdated?.(data)
+      const updatedProfile = {
+        fullName: data.name,
+        phoneNumber: data.phone || '',
+        email: data.email,
+      }
+      setProfile(updatedProfile)
+      setFormState({ ...updatedProfile, newPassword: '', confirmPassword: '' })
+      // data.token is only sent after a password change (the old token stops working).
+      const { message, ...userFields } = data
+      localStorage.setItem('userInfo', JSON.stringify({ ...userInfo, ...userFields }))
+      onProfileUpdated?.(userFields)
       setShowSaveModal(false)
+      setCurrentPassword('')
       setIsEditing(false)
-      alert('Your profile changes have been saved.')
+      setNotice(message || 'Your profile changes have been saved.')
     } catch (error) {
-      alert(error.message)
+      setSaveError(error.message === 'Failed to fetch' ? "Can't reach the server. Please try again." : error.message)
     } finally {
       setSaving(false)
     }
@@ -2235,6 +2286,17 @@ function SettingsPage({ onProfileUpdated }) {
             <User size={14} /> {isEditing ? 'Edit information' : 'User information'}
           </h2>
 
+          {notice && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-eco-200 bg-eco-50 px-4 py-3 text-xs font-bold text-eco-800">
+              <CheckCircle size={15} className="shrink-0" /> {notice}
+            </div>
+          )}
+          {formError && (
+            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">
+              {formError}
+            </div>
+          )}
+
           <div className="space-y-4">
             <SettingsInput
               label="Full Name"
@@ -2251,12 +2313,16 @@ function SettingsPage({ onProfileUpdated }) {
                 onChange={(val) => setFormState({ ...formState, phoneNumber: val })}
               />
 
-              <SettingsInput
-                label="Email"
-                value={formState.email}
-                disabled={!isEditing}
-                onChange={(val) => setFormState({ ...formState, email: val })}
-              />
+              <div>
+                <SettingsInput
+                  label="Email"
+                  value={formState.email}
+                  disabled
+                />
+                {isEditing && (
+                  <p className="mt-1 text-[11px] font-medium text-gray-400">Your email was verified at sign-up and can't be changed.</p>
+                )}
+              </div>
             </div>
 
             {isEditing && (
@@ -2304,25 +2370,41 @@ function SettingsPage({ onProfileUpdated }) {
 
       {showSaveModal && (
         <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="ecotask-modal-panel eco-modal w-full max-w-[360px] p-6 text-center">
-            <span className="eco-icon-tile mx-auto h-12 w-12 rounded-2xl"><CheckCircle size={22} /></span>
-            <h2 className="mt-4 text-base font-extrabold text-gray-800">
-              Save changes?
-            </h2>
+          <div className="absolute inset-0" onClick={closeSaveModal} />
+          <form onSubmit={handleConfirmSave} className="ecotask-modal-panel eco-modal relative z-10 w-full max-w-[380px] p-6">
+            <div className="text-center">
+              <span className="eco-icon-tile mx-auto h-12 w-12 rounded-2xl"><Lock size={20} /></span>
+              <h2 className="mt-4 text-base font-extrabold text-gray-800">
+                Confirm it's you
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+                Enter your current password to save your profile changes.
+                {formState.newPassword && ' Changing your password will log you out of other devices.'}
+              </p>
+            </div>
 
-            <p className="mt-2 text-sm leading-relaxed text-gray-600">
-              Your profile will be updated with the new information.
-            </p>
+            <div className="mt-5 text-left">
+              <SettingsInput
+                label="Current Password"
+                type="password"
+                placeholder="Enter your current password"
+                value={currentPassword}
+                onChange={(val) => { setCurrentPassword(val); setSaveError('') }}
+                autoFocus
+                autoComplete="current-password"
+              />
+              {saveError && <p className="mt-1.5 text-xs font-semibold text-rose-600">{saveError}</p>}
+            </div>
 
             <div className="mt-5 flex justify-center gap-2">
-              <button onClick={() => setShowSaveModal(false)} className="eco-btn eco-btn-secondary">
+              <button type="button" onClick={closeSaveModal} disabled={saving} className="eco-btn eco-btn-secondary">
                 Cancel
               </button>
-              <button onClick={handleConfirmSave} disabled={saving} className="eco-btn eco-btn-primary px-6">
-                {saving ? 'Saving...' : 'Yes, save'}
+              <button type="submit" disabled={saving} className="eco-btn eco-btn-primary px-6">
+                {saving ? 'Saving...' : 'Save changes'}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>
@@ -2336,6 +2418,8 @@ function SettingsInput({
   disabled = false,
   type = 'text',
   placeholder = '',
+  autoFocus = false,
+  autoComplete,
 }) {
   const [showPassword, setShowPassword] = useState(false)
   const isPasswordField = type === 'password'
@@ -2352,6 +2436,8 @@ function SettingsInput({
           value={value}
           placeholder={placeholder}
           disabled={disabled}
+          autoFocus={autoFocus}
+          autoComplete={autoComplete}
           onChange={(e) => onChange && onChange(e.target.value)}
           className={`eco-input ${isPasswordField ? 'pr-10' : ''}`}
         />
