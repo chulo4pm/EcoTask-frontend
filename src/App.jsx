@@ -17,6 +17,10 @@ import {
   Building2,
   Hourglass,
   LogIn,
+  ChevronDown,
+  UserPlus,
+  User,
+  CheckCircle2,
 } from "lucide-react";
 
 import Login from "./Login";
@@ -92,774 +96,477 @@ function EcoTaskLogo({ light = false }) {
    LANDING PAGE
 ========================================================= */
 
-function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+// Adds the "eco-reveal-in" class to .eco-reveal elements as they scroll into view.
+// Cards in the same row get a small delay so they appear one after another.
+function useScrollReveal(rootRef) {
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const items = [...root.querySelectorAll(".eco-reveal")];
 
-  const scrollToSection = (id) => {
-    const section = document.getElementById(id);
+    items.forEach((el) => {
+      const siblings = [...el.parentElement.children].filter((c) => c.classList.contains("eco-reveal"));
+      el.style.setProperty("--eco-reveal-delay", `${siblings.indexOf(el) * 110}ms`);
+    });
 
-    if (section) {
-      section.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+    if (!("IntersectionObserver" in window)) {
+      items.forEach((el) => el.classList.add("eco-reveal-in"));
+      return undefined;
     }
 
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("eco-reveal-in");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+
+    items.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [rootRef]);
+}
+
+function SectionTag({ children, light = false }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.12em] ${
+      light ? "bg-white/10 text-green-300" : "bg-green-100 text-green-700"
+    }`}>
+      <Leaf size={13} />
+      {children}
+    </span>
+  );
+}
+
+function IconTile({ icon: Icon, dark = false }) {
+  return (
+    <span className={`landing-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+      dark ? "bg-white/10 text-green-300" : "bg-green-100 text-green-700"
+    }`}>
+      <Icon size={20} />
+    </span>
+  );
+}
+
+function FloatingLeaf({ className, size, delay }) {
+  return (
+    <Leaf
+      aria-hidden="true"
+      size={size}
+      className={`landing-leaf pointer-events-none absolute z-[1] text-green-400/30 ${className}`}
+      style={{ animationDelay: delay }}
+      fill="currentColor"
+    />
+  );
+}
+
+const HOW_IT_WORKS = [
+  { icon: UserPlus, title: "Create an account", text: "Sign up with your email and confirm the 6-digit code." },
+  { icon: MapPin, title: "Join an activity", text: "Browse clean-ups, tree planting and more near you." },
+  { icon: CheckCircle2, title: "Show up and help", text: "The organizer marks your attendance on the day." },
+  { icon: Award, title: "Get your certificate", text: "Download your participation certificate as a PDF." },
+];
+
+const FEATURES = [
+  { icon: MapPin, title: "Discover activities", text: "By location, schedule, and open slots." },
+  { icon: Users, title: "Join activities", text: "Register for community-led initiatives in one click." },
+  { icon: CalendarDays, title: "Manage your schedule", text: "Keep track of upcoming activities." },
+  { icon: ClipboardCheck, title: "Track participation", text: "A record of every activity you joined." },
+  { icon: Bell, title: "Announcements", text: "Updates, reminders, and community news." },
+  { icon: Award, title: "Certificates", text: "Issued by the organizer, downloadable as PDF." },
+];
+
+const FAQS = [
+  { q: "Is EcoTask free?", a: "Yes. Volunteer and organizer accounts are both free." },
+  { q: "How do I become an organizer?", a: "Apply as an organizer and upload a verification document. The EcoTask admin reviews it, and once approved you can post activities." },
+  { q: "How do I get my certificate?", a: "After the activity, the organizer marks attendance and issues certificates. You can download yours from your dashboard." },
+  { q: "Can I leave an activity after joining?", a: "Yes. You can leave an activity from your dashboard before it happens." },
+];
+
+const NAV_LINKS = [
+  { id: "how", label: "How it works" },
+  { id: "join", label: "Join" },
+  { id: "features", label: "Features" },
+  { id: "contacts", label: "Contact" },
+];
+
+function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerRegister }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState(0);
+  const rootRef = useRef(null);
+  const loginRef = useRef(null);
+
+  useScrollReveal(rootRef);
+
+  // Close the "Log in" menu when clicking anywhere else.
+  useEffect(() => {
+    if (!loginOpen) return undefined;
+    const close = (e) => {
+      if (loginRef.current && !loginRef.current.contains(e.target)) setLoginOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [loginOpen]);
+
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
     setMenuOpen(false);
   };
 
+  const primaryBtn = "landing-btn inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 font-bold text-black shadow-[0_8px_20px_-8px_rgba(34,197,94,0.7)] transition hover:-translate-y-px hover:bg-green-400 active:scale-95";
+  const ghostBtn = "landing-btn inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 font-bold text-white transition hover:bg-white/10 active:scale-95";
+  const outlineBtn = "landing-btn inline-flex items-center justify-center gap-2 rounded-xl border border-green-100 bg-white font-bold text-[#12351f] transition hover:border-green-500 hover:text-green-700 active:scale-95";
+  const card = "eco-reveal landing-card rounded-2xl border border-green-100 bg-white";
+
   return (
-    <div className="min-h-screen w-full bg-[#f5faf6] text-[#12351f]">
+    <div ref={rootRef} className="min-h-screen w-full overflow-x-hidden bg-[#f5faf6] text-[#12351f]">
 
-      {/* =====================================================
-          NAVBAR
-      ===================================================== */}
-
+      {/* ================= NAVBAR ================= */}
       <header className="fixed left-0 top-0 z-50 w-full border-b border-white/10 bg-[#061c10]/95 backdrop-blur-md">
-        <nav className="mx-auto flex h-[76px] max-w-[1400px] items-center justify-between px-6 md:px-10 lg:px-16">
-
-          {/* LOGO */}
-
-          <button
-            onClick={() => scrollToSection("home")}
-            className="shrink-0"
-          >
+        <nav className="mx-auto flex h-[72px] max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
+          <button onClick={() => scrollToSection("home")} className="shrink-0" aria-label="EcoTask home">
             <EcoTaskLogo light />
           </button>
 
-
-          {/* DESKTOP NAVIGATION */}
-
-          <div className="hidden items-center gap-8 md:flex">
-
-            <button
-              onClick={() => scrollToSection("home")}
-              className="text-sm font-semibold text-white transition hover:text-green-400"
-            >
-              Home
-            </button>
-
-            <button
-              onClick={() => scrollToSection("about")}
-              className="text-sm font-semibold text-white/80 transition hover:text-green-400"
-            >
-              About
-            </button>
-
-            <button
-              onClick={() => scrollToSection("features")}
-              className="text-sm font-semibold text-white/80 transition hover:text-green-400"
-            >
-              Key Features
-            </button>
-
-            <button
-              onClick={() => scrollToSection("contacts")}
-              className="text-sm font-semibold text-white/80 transition hover:text-green-400"
-            >
-              Contacts
-            </button>
-
+          <div className="hidden items-center gap-7 md:flex">
+            {NAV_LINKS.map((link) => (
+              <button
+                key={link.id}
+                onClick={() => scrollToSection(link.id)}
+                className="text-sm font-semibold text-white/80 transition hover:text-green-400"
+              >
+                {link.label}
+              </button>
+            ))}
           </div>
 
-
-          {/* DESKTOP ACTIONS */}
-
-          <div className="hidden items-center gap-3 md:flex">
-
-            <button
-              onClick={onLogin}
-              className="flex items-center gap-2 rounded-lg border border-white/25 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              <LogIn size={16} />
-              Log In
-            </button>
-
-            <button
-              onClick={onOrganizer}
-              className="flex items-center gap-2 rounded-lg bg-green-500 px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-green-400"
-            >
-              <Building2 size={16} />
-              Organizer
-            </button>
-
-          </div>
-
-
-          {/* MOBILE MENU BUTTON */}
-
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="rounded-lg p-2 text-white md:hidden"
-            aria-label="Toggle menu"
-          >
-            {menuOpen ? <X size={25} /> : <Menu size={25} />}
-          </button>
-
-        </nav>
-
-
-        {/* MOBILE MENU */}
-
-        {menuOpen && (
-          <div className="border-t border-white/10 bg-[#061c10] px-6 py-5 md:hidden">
-
-            <div className="flex flex-col gap-2">
-
+          <div className="flex items-center gap-2.5">
+            {/* Log in menu: Volunteer / Organizer */}
+            <div ref={loginRef} className="relative hidden sm:block">
               <button
-                onClick={() => scrollToSection("home")}
-                className="rounded-lg px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white/10"
+                onClick={() => setLoginOpen(!loginOpen)}
+                aria-expanded={loginOpen}
+                className={`${ghostBtn} px-4 py-2.5 text-sm`}
               >
-                Home
+                <LogIn size={16} />
+                Log in
+                <ChevronDown size={15} className={`transition-transform ${loginOpen ? "rotate-180" : ""}`} />
               </button>
 
-              <button
-                onClick={() => scrollToSection("about")}
-                className="rounded-lg px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white/10"
-              >
-                About
-              </button>
-
-              <button
-                onClick={() => scrollToSection("features")}
-                className="rounded-lg px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white/10"
-              >
-                Key Features
-              </button>
-
-              <button
-                onClick={() => scrollToSection("contacts")}
-                className="rounded-lg px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white/10"
-              >
-                Contacts
-              </button>
-
-              <div className="my-2 h-px bg-white/10" />
-
-              <button
-                onClick={onLogin}
-                className="flex items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-semibold text-green-300 hover:bg-white/10"
-              >
-                <LogIn size={17} />
-                Volunteer Log In
-              </button>
-
-              <button
-                onClick={onOrganizer}
-                className="flex items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-semibold text-green-300 hover:bg-white/10"
-              >
-                <Building2 size={17} />
-                Organizer
-              </button>
-
+              {loginOpen && (
+                <div className="landing-pop absolute right-0 top-[calc(100%+8px)] w-64 rounded-2xl bg-white p-1.5 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.35)]">
+                  <button
+                    onClick={() => { setLoginOpen(false); onLogin(); }}
+                    className="flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition hover:bg-green-50"
+                  >
+                    <IconTile icon={User} />
+                    <span>
+                      <span className="block text-sm font-bold text-[#12351f]">Volunteer</span>
+                      <span className="text-xs text-gray-500">Join and track activities</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setLoginOpen(false); onOrganizer(); }}
+                    className="flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition hover:bg-green-50"
+                  >
+                    <IconTile icon={Building2} />
+                    <span>
+                      <span className="block text-sm font-bold text-[#12351f]">Organizer</span>
+                      <span className="text-xs text-gray-500">Manage your activities</span>
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
 
+            <button onClick={onGetStarted} className={`${primaryBtn} px-4 py-2.5 text-sm`}>
+              Sign up
+            </button>
+
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="rounded-lg p-2 text-white md:hidden"
+              aria-label="Toggle menu"
+            >
+              {menuOpen ? <X size={25} /> : <Menu size={25} />}
+            </button>
+          </div>
+        </nav>
+
+        {/* Mobile menu */}
+        {menuOpen && (
+          <div className="landing-pop border-t border-white/10 bg-[#061c10] px-4 py-4 md:hidden">
+            <div className="flex flex-col gap-1">
+              {NAV_LINKS.map((link) => (
+                <button
+                  key={link.id}
+                  onClick={() => scrollToSection(link.id)}
+                  className="rounded-lg px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white/10"
+                >
+                  {link.label}
+                </button>
+              ))}
+              <div className="my-2 h-px bg-white/10" />
+              <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-white/40">Volunteer</p>
+              <div className="grid grid-cols-2 gap-2 px-2">
+                <button onClick={onGetStarted} className={`${primaryBtn} px-3 py-2.5 text-sm`}>Sign up</button>
+                <button onClick={onLogin} className={`${ghostBtn} px-3 py-2.5 text-sm`}>Log in</button>
+              </div>
+              <p className="px-4 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wider text-white/40">Organizer</p>
+              <div className="grid grid-cols-2 gap-2 px-2">
+                <button onClick={onOrganizerRegister} className={`${ghostBtn} px-3 py-2.5 text-sm`}>Apply</button>
+                <button onClick={onOrganizer} className={`${ghostBtn} px-3 py-2.5 text-sm`}>Log in</button>
+              </div>
+            </div>
           </div>
         )}
-
       </header>
-
-
-      {/* =====================================================
-          HOME
-      ===================================================== */}
 
       <main>
 
-        <section
-          id="home"
-          className="relative min-h-screen scroll-mt-[76px] overflow-hidden bg-[#00140d] pt-[76px]"
-        >
-
-          {/* BACKGROUND IMAGE */}
-
-          <div className="absolute inset-0">
+        {/* ================= HERO ================= */}
+        <section id="home" className="relative scroll-mt-[72px] overflow-hidden bg-[#00140d] pt-[72px] text-white">
+          <div className="absolute inset-0 overflow-hidden">
             <img
               src={volunteer}
-              alt="Volunteers helping the environment"
-              className="h-full w-full object-cover object-center"
+              alt="Volunteers holding young plants"
+              className="landing-hero-img h-full w-full object-cover object-center"
             />
           </div>
-
-
-          {/* GREEN OVERLAY */}
-
-          <div className="absolute inset-0 bg-gradient-to-r from-[#00150d] via-[#002417]/90 to-[#002416]/60" />
-
-          <div className="absolute inset-0 bg-black/20" />
-
-
-          {/* HERO CONTENT */}
-
-          <div className="relative z-10 mx-auto flex min-h-[calc(100vh-76px)] max-w-[1400px] items-center px-6 py-20 md:px-10 lg:px-16">
-
-            <div className="max-w-3xl">
-
-              <p className="mb-5 text-xs font-bold uppercase tracking-[0.25em] text-green-400 md:text-sm">
-                Welcome to EcoTask
-              </p>
-
-              <h1 className="max-w-3xl text-5xl font-extrabold leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl">
-                Making Every Task
-                <br />
-                <span className="text-green-400">
-                  Better for the Planet.
-                </span>
-              </h1>
-
-              <p className="mt-7 max-w-xl text-base leading-7 text-white/85 md:text-lg">
-                EcoTask makes it easier for community members to discover,
-                join, and keep track of environmental activities in one place.
-              </p>
-
-              <div className="mt-9 flex flex-wrap gap-4">
-
-                <button
-                  onClick={onGetStarted}
-                  className="flex items-center gap-2 rounded-lg bg-green-500 px-7 py-4 text-sm font-bold text-black shadow-lg transition hover:bg-green-400 active:scale-95"
-                >
-                  Join as Volunteer
-                  <ArrowRight size={18} />
-                </button>
-
-                <button
-                  onClick={onOrganizer}
-                  className="flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur transition hover:bg-white/20 active:scale-95"
-                >
-                  <Building2 size={18} />
-                  I'm an Organizer
-                </button>
-
-              </div>
-
-              <p className="mt-6 text-sm text-white/70">
-                Already a volunteer?{" "}
-                <button
-                  onClick={onLogin}
-                  className="font-semibold text-green-400 underline-offset-4 transition hover:text-green-300 hover:underline"
-                >
-                  Log in here
-                </button>
-              </p>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =====================================================
-            ABOUT
-        ===================================================== */}
-
-        <section
-          id="about"
-          className="scroll-mt-[76px] bg-white px-6 py-24 md:px-10 lg:px-16"
-        >
-
-          <div className="mx-auto max-w-[1200px]">
-
-            <div className="grid items-center gap-14 lg:grid-cols-2">
-
-              {/* LEFT */}
-
-              <div>
-
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 text-xs font-bold uppercase tracking-wider text-green-700">
-                  <Leaf size={15} />
-                  About EcoTask
-                </div>
-
-                <h2 className="text-4xl font-extrabold leading-tight text-[#12351f] md:text-5xl">
-                  Turning environmental
-                  <span className="text-green-600">
-                    {" "}action into community impact.
-                  </span>
-                </h2>
-
-                <p className="mt-6 text-base leading-7 text-gray-600">
-                  EcoTask is a web-based platform designed to help communities
-                  organize and participate in environmental activities.
-                  Instead of searching through different platforms for schedules,
-                  locations, registration details, and tasks, volunteers can
-                  access everything in one place.
-                </p>
-
-                <p className="mt-4 text-base leading-7 text-gray-600">
-                  The platform connects volunteers and activity organizers while
-                  making participation easier to manage and track.
-                </p>
-
-              </div>
-
-
-              {/* RIGHT */}
-
-              <div className="grid gap-5 sm:grid-cols-2">
-
-                <div className="rounded-2xl bg-[#eff8f1] p-7">
-                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-600 text-white">
-                    <Users size={23} />
-                  </div>
-
-                  <h3 className="text-lg font-bold text-[#12351f]">
-                    Community Driven
-                  </h3>
-
-                  <p className="mt-3 text-sm leading-6 text-gray-600">
-                    Connect volunteers and organizers through shared
-                    environmental activities.
-                  </p>
-                </div>
-
-
-                <div className="rounded-2xl bg-[#eff8f1] p-7">
-                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-600 text-white">
-                    <MapPin size={23} />
-                  </div>
-
-                  <h3 className="text-lg font-bold text-[#12351f]">
-                    Local Activities
-                  </h3>
-
-                  <p className="mt-3 text-sm leading-6 text-gray-600">
-                    Discover activities and volunteer opportunities in
-                    different communities.
-                  </p>
-                </div>
-
-
-                <div className="rounded-2xl bg-[#eff8f1] p-7">
-                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-600 text-white">
-                    <ClipboardCheck size={23} />
-                  </div>
-
-                  <h3 className="text-lg font-bold text-[#12351f]">
-                    Organized Tasks
-                  </h3>
-
-                  <p className="mt-3 text-sm leading-6 text-gray-600">
-                    Know what tasks need to be completed before joining
-                    an activity.
-                  </p>
-                </div>
-
-
-                <div className="rounded-2xl bg-[#eff8f1] p-7">
-                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-600 text-white">
-                    <ShieldCheck size={23} />
-                  </div>
-
-                  <h3 className="text-lg font-bold text-[#12351f]">
-                    Verified Organizers
-                  </h3>
-
-                  <p className="mt-3 text-sm leading-6 text-gray-600">
-                    Organizers are reviewed and approved by the EcoTask
-                    admin before they can post activities.
-                  </p>
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =====================================================
-            KEY FEATURES
-        ===================================================== */}
-
-        <section
-          id="features"
-          className="scroll-mt-[76px] bg-[#f3f8f4] px-6 py-24 md:px-10 lg:px-16"
-        >
-
-          <div className="mx-auto max-w-[1200px]">
-
-            <div className="mx-auto max-w-2xl text-center">
-
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 text-xs font-bold uppercase tracking-wider text-green-700">
-                <Leaf size={15} />
-                Key Features
-              </div>
-
-              <h2 className="text-4xl font-extrabold text-[#12351f] md:text-5xl">
-                Everything you need to
-                <span className="text-green-600">
-                  {" "}make an impact.
-                </span>
-              </h2>
-
-              <p className="mt-5 text-base leading-7 text-gray-600">
-                EcoTask brings important environmental activity tools
-                together in one simple platform.
-              </p>
-
-            </div>
-
-
-            {/* FEATURE CARDS */}
-
-            <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-
-              {/* CARD 1 */}
-
-              <div className="rounded-2xl border border-green-100 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-
-                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-green-100 text-green-700">
-                  <MapPin size={25} />
-                </div>
-
-                <h3 className="mt-6 text-xl font-bold text-[#12351f]">
-                  Discover Activities
-                </h3>
-
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Find environmental activities based on location,
-                  schedule, and available volunteer opportunities.
-                </p>
-
-              </div>
-
-
-              {/* CARD 2 */}
-
-              <div className="rounded-2xl border border-green-100 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-
-                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-green-100 text-green-700">
-                  <Users size={25} />
-                </div>
-
-                <h3 className="mt-6 text-xl font-bold text-[#12351f]">
-                  Join Activities
-                </h3>
-
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Register for environmental activities and become part
-                  of community-led initiatives.
-                </p>
-
-              </div>
-
-
-              {/* CARD 3 */}
-
-              <div className="rounded-2xl border border-green-100 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-
-                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-green-100 text-green-700">
-                  <CalendarDays size={25} />
-                </div>
-
-                <h3 className="mt-6 text-xl font-bold text-[#12351f]">
-                  Manage Your Schedule
-                </h3>
-
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Keep track of upcoming environmental activities and
-                  avoid missing important schedules.
-                </p>
-
-              </div>
-
-
-              {/* CARD 4 */}
-
-              <div className="rounded-2xl border border-green-100 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-
-                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-green-100 text-green-700">
-                  <ClipboardCheck size={25} />
-                </div>
-
-                <h3 className="mt-6 text-xl font-bold text-[#12351f]">
-                  Track Participation
-                </h3>
-
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Monitor completed tasks and keep a record of your
-                  environmental participation.
-                </p>
-
-              </div>
-
-
-              {/* CARD 5 */}
-
-              <div className="rounded-2xl border border-green-100 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-
-                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-green-100 text-green-700">
-                  <Bell size={25} />
-                </div>
-
-                <h3 className="mt-6 text-xl font-bold text-[#12351f]">
-                  Receive Announcements
-                </h3>
-
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Stay updated with activity announcements, reminders,
-                  and important community information.
-                </p>
-
-              </div>
-
-
-              {/* CARD 6 */}
-
-              <div className="rounded-2xl border border-green-100 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-
-                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-green-100 text-green-700">
-                  <Award size={25} />
-                </div>
-
-                <h3 className="mt-6 text-xl font-bold text-[#12351f]">
-                  Earn Certificates
-                </h3>
-
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Receive a participation certificate from the organizer
-                  after completing an activity, downloadable as a PDF.
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* =====================================================
-            CONTACTS
-        ===================================================== */}
-
-        <section
-          id="contacts"
-          className="scroll-mt-[76px] bg-white px-6 py-24 md:px-10 lg:px-16"
-        >
-
-          <div className="mx-auto max-w-[1200px]">
-
-            <div className="grid items-center gap-14 lg:grid-cols-2">
-
-              {/* CONTACT INTRO */}
-
-              <div>
-
-                <h2 className="text-4xl font-extrabold leading-tight text-[#12351f] md:text-5xl">
-                  Have questions?
-                  <br />
-                  <span className="text-green-600">
-                    We'd love to hear from you.
-                  </span>
-                </h2>
-
-                <p className="mt-6 max-w-lg text-base leading-7 text-gray-600">
-                  For questions, suggestions, or information about EcoTask,
-                  you can reach out through our contact details.
-                </p>
-
-
-                {/* CONTACT DETAILS */}
-
-                <div className="mt-9 space-y-5">
-
-                  <div className="flex items-center gap-4">
-
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700">
-                      <Mail size={21} />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        Email
-                      </p>
-
-                      <p className="mt-1 font-semibold text-[#12351f]">
-                        ecotask@example.com
-                      </p>
-                    </div>
-
-                  </div>
-
-
-                  <div className="flex items-center gap-4">
-
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700">
-                      <Phone size={21} />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        Phone
-                      </p>
-
-                      <p className="mt-1 font-semibold text-[#12351f]">
-                        +63 900 000 0000
-                      </p>
-                    </div>
-
-                  </div>
-
-
-                  <div className="flex items-center gap-4">
-
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700">
-                      <MapPin size={21} />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        Location
-                      </p>
-
-                      <p className="mt-1 font-semibold text-[#12351f]">
-                        Pangasinan, Philippines
-                      </p>
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-
-              {/* CALL TO ACTION */}
-
-              <div className="relative overflow-hidden rounded-3xl bg-[#00140d] p-10 text-white shadow-xl md:p-12">
-
-                <img
-                  src={volunteer}
-                  alt=""
-                  aria-hidden="true"
-                  className="absolute inset-0 h-full w-full object-cover opacity-30"
-                />
-
-                <div className="absolute inset-0 bg-gradient-to-br from-[#00150d]/90 via-[#002417]/80 to-[#075f2b]/70" />
-
-                <div className="relative z-10">
-
-                  <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-green-300">
-                    <Leaf size={15} />
-                    Get Involved
-                  </div>
-
-                  <h3 className="text-3xl font-extrabold leading-tight md:text-4xl">
-                    Ready to make a difference?
-                  </h3>
-
-                  <p className="mt-4 max-w-md text-base leading-7 text-white/80">
-                    Create a free volunteer account and join environmental
-                    activities in your community today.
-                  </p>
-
-                  <div className="mt-8 flex flex-wrap gap-3">
-
-                    <button
-                      onClick={onGetStarted}
-                      className="flex items-center gap-2 rounded-lg bg-green-500 px-6 py-3.5 text-sm font-bold text-black transition hover:bg-green-400 active:scale-95"
-                    >
-                      Join as Volunteer
-                      <ArrowRight size={17} />
-                    </button>
-
-                    <button
-                      onClick={onLogin}
-                      className="flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-white/20 active:scale-95"
-                    >
-                      <LogIn size={17} />
-                      Log In
-                    </button>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-      </main>
-
-
-      {/* =====================================================
-          FOOTER
-      ===================================================== */}
-
-      <footer className="bg-[#061c10] px-6 py-10 text-white md:px-10 lg:px-16">
-
-        <div className="mx-auto flex max-w-[1200px] flex-col gap-6 md:flex-row md:items-center md:justify-between">
-
-          <div>
-
-            <EcoTaskLogo light />
-
-            <p className="mt-3 max-w-sm text-sm leading-6 text-white/55">
-              Making environmental participation easier,
-              one task at a time.
+          <div className="absolute inset-0 bg-gradient-to-r from-[#00150d] via-[#002417]/90 to-[#002416]/55" />
+
+          <FloatingLeaf className="right-[12%] top-[22%]" size={46} delay="0s" />
+          <FloatingLeaf className="bottom-[18%] right-[30%] hidden sm:block" size={30} delay="-2s" />
+          <FloatingLeaf className="bottom-[34%] right-[6%]" size={36} delay="-4s" />
+
+          <div className="relative z-10 mx-auto max-w-[1200px] px-4 pb-20 pt-16 sm:px-6 md:pb-28 md:pt-24">
+            <p className="landing-up text-xs font-extrabold uppercase tracking-[0.22em] text-green-400" style={{ animationDelay: "100ms" }}>
+              Welcome to EcoTask
             </p>
 
+            <h1 className="landing-up mt-4 max-w-3xl text-[40px] font-black leading-[1.05] tracking-tight sm:text-5xl md:text-6xl" style={{ animationDelay: "220ms" }}>
+              Volunteer for a <span className="text-green-400">greener community.</span>
+            </h1>
+
+            <p className="landing-up mt-5 max-w-xl text-base leading-7 text-white/85 md:text-lg" style={{ animationDelay: "340ms" }}>
+              Find local environmental activities, sign up in one click, and earn a
+              certificate for every activity you complete.
+            </p>
+
+            <div className="landing-up mt-8" style={{ animationDelay: "460ms" }}>
+              <button onClick={onGetStarted} className={`${primaryBtn} px-7 py-4 text-[15px]`}>
+                Join as Volunteer
+                <ArrowRight size={18} />
+              </button>
+            </div>
+
+            <p className="landing-up mt-5 text-sm text-white/70" style={{ animationDelay: "460ms" }}>
+              Running an eco activity?{" "}
+              <button onClick={onOrganizerRegister} className="font-bold text-green-400 transition hover:text-green-300">
+                Apply as an organizer →
+              </button>
+            </p>
+
+            <div className="landing-up mt-10 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-white/75" style={{ animationDelay: "580ms" }}>
+              <span className="flex items-center gap-2"><CheckCircle2 size={16} className="text-green-400" /> Free for volunteers</span>
+              <span className="flex items-center gap-2"><ShieldCheck size={16} className="text-green-400" /> Organizers verified by admin</span>
+              <span className="flex items-center gap-2"><Award size={16} className="text-green-400" /> PDF certificates</span>
+            </div>
           </div>
+        </section>
 
+        {/* ================= HOW IT WORKS ================= */}
+        <section id="how" className="scroll-mt-[72px] px-4 py-20 sm:px-6 md:py-24">
+          <div className="mx-auto max-w-[1200px]">
+            <div className="eco-reveal mx-auto max-w-2xl text-center">
+              <SectionTag>How it works</SectionTag>
+              <h2 className="mt-4 text-3xl font-black leading-tight tracking-tight md:text-[42px]">
+                From sign-up to <span className="text-green-600">certificate</span> in 4 steps.
+              </h2>
+            </div>
 
+            <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {HOW_IT_WORKS.map((step, index) => (
+                <div key={step.title} className={`${card} relative p-6`}>
+                  <span className="absolute right-5 top-4 text-4xl font-black leading-none text-green-100">{index + 1}</span>
+                  <IconTile icon={step.icon} />
+                  <h3 className="mt-4 text-[17px] font-bold">{step.title}</h3>
+                  <p className="mt-1.5 text-sm leading-6 text-gray-600">{step.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ================= TWO WAYS TO TAKE PART ================= */}
+        <section id="join" className="scroll-mt-[72px] bg-white px-4 py-20 sm:px-6 md:py-24">
+          <div className="mx-auto max-w-[1200px]">
+            <div className="eco-reveal mx-auto max-w-2xl text-center">
+              <SectionTag>Get started</SectionTag>
+              <h2 className="mt-4 text-3xl font-black leading-tight tracking-tight md:text-[42px]">
+                Two ways to <span className="text-green-600">take part.</span>
+              </h2>
+              <p className="mt-3 text-gray-600">Pick the one that fits you. Each has its own sign-up and log-in.</p>
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Volunteer */}
+              <div className={`${card} flex flex-col p-7 md:p-8`}>
+                <IconTile icon={User} />
+                <h3 className="mt-4 text-2xl font-black">I'm a Volunteer</h3>
+                <p className="mt-1 text-sm text-gray-600">For community members who want to help.</p>
+                <ul className="my-6 grid gap-2.5 text-sm">
+                  {["Discover and join activities near you", "Get reminders and announcements", "Track your participation history", "Download certificates"].map((item) => (
+                    <li key={item} className="flex items-start gap-2.5"><CheckCircle2 size={18} className="mt-px shrink-0 text-green-500" />{item}</li>
+                  ))}
+                </ul>
+                <div className="mt-auto flex flex-wrap gap-2.5">
+                  <button onClick={onGetStarted} className={`${primaryBtn} px-5 py-3 text-sm`}>
+                    Sign up free <ArrowRight size={16} />
+                  </button>
+                  <button onClick={onLogin} className={`${outlineBtn} px-5 py-3 text-sm`}>
+                    Log in
+                  </button>
+                </div>
+              </div>
+
+              {/* Organizer */}
+              <div className="eco-reveal landing-card flex flex-col rounded-2xl bg-gradient-to-br from-[#00150d] to-[#075f2b] p-7 text-white md:p-8">
+                <IconTile icon={Building2} dark />
+                <h3 className="mt-4 text-2xl font-black">I'm an Organizer</h3>
+                <p className="mt-1 text-sm text-white/75">For schools, LGUs, and groups that run eco activities.</p>
+                <ul className="my-6 grid gap-2.5 text-sm">
+                  {["Post activities with tasks and volunteer limits", "See who joined and mark attendance", "Issue certificates in one click", "Send updates to your volunteers"].map((item) => (
+                    <li key={item} className="flex items-start gap-2.5"><CheckCircle2 size={18} className="mt-px shrink-0 text-green-400" />{item}</li>
+                  ))}
+                </ul>
+                <div className="mt-auto flex flex-wrap gap-2.5">
+                  <button onClick={onOrganizerRegister} className={`${primaryBtn} px-5 py-3 text-sm`}>
+                    Apply as organizer <ArrowRight size={16} />
+                  </button>
+                  <button onClick={onOrganizer} className={`${ghostBtn} px-5 py-3 text-sm`}>
+                    Organizer log in
+                  </button>
+                </div>
+                <p className="mt-4 flex items-center gap-1.5 text-xs text-white/60">
+                  <Hourglass size={13} /> Applications are reviewed by the EcoTask admin before you can post activities.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ================= KEY FEATURES ================= */}
+        <section id="features" className="scroll-mt-[72px] px-4 py-20 sm:px-6 md:py-24">
+          <div className="mx-auto max-w-[1200px]">
+            <div className="eco-reveal mx-auto max-w-2xl text-center">
+              <SectionTag>Key features</SectionTag>
+              <h2 className="mt-4 text-3xl font-black leading-tight tracking-tight md:text-[42px]">
+                Everything in <span className="text-green-600">one place.</span>
+              </h2>
+              <p className="mt-3 text-gray-600">EcoTask brings environmental activity tools together in one simple platform.</p>
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((feature) => (
+                <div key={feature.title} className={`${card} flex gap-4 p-5`}>
+                  <IconTile icon={feature.icon} />
+                  <div>
+                    <h4 className="font-bold">{feature.title}</h4>
+                    <p className="mt-0.5 text-sm text-gray-600">{feature.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ================= CONTACT + FAQ ================= */}
+        <section id="contacts" className="scroll-mt-[72px] bg-white px-4 py-20 sm:px-6 md:py-24">
+          <div className="mx-auto grid max-w-[1200px] items-start gap-12 lg:grid-cols-2">
+            <div className="eco-reveal">
+              <SectionTag>Contact</SectionTag>
+              <h2 className="mt-4 text-3xl font-black leading-tight tracking-tight md:text-[42px]">
+                Have questions? <span className="text-green-600">We'd love to help.</span>
+              </h2>
+              <p className="mt-4 max-w-lg text-gray-600">
+                For questions, suggestions, or information about EcoTask, reach out through our contact details.
+              </p>
+
+              <div className="mt-8 space-y-5">
+                {[
+                  { icon: Mail, label: "Email", value: "ecotask@example.com" },
+                  { icon: Phone, label: "Phone", value: "+63 900 000 0000" },
+                  { icon: MapPin, label: "Location", value: "Pangasinan, Philippines" },
+                ].map(({ icon, label, value }) => (
+                  <div key={label} className="flex items-center gap-4">
+                    <IconTile icon={icon} />
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                      <p className="font-semibold">{value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="eco-reveal">
+              <SectionTag>FAQ</SectionTag>
+              <div className="mt-5 space-y-2.5">
+                {FAQS.map((faq, index) => {
+                  const isOpen = openFaq === index;
+                  return (
+                    <div key={faq.q} className={`rounded-2xl border transition ${isOpen ? "border-green-200 bg-green-50/60" : "border-green-100 bg-[#f8fcf9]"}`}>
+                      <button
+                        onClick={() => setOpenFaq(isOpen ? -1 : index)}
+                        aria-expanded={isOpen}
+                        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left font-bold"
+                      >
+                        {faq.q}
+                        <ChevronDown size={18} className={`shrink-0 text-green-600 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      <div className={`grid transition-all duration-300 ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                        <p className="overflow-hidden px-5 text-sm leading-6 text-gray-600">
+                          <span className="block pb-4">{faq.a}</span>
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ================= FOOTER ================= */}
+      <footer className="bg-[#061c10] px-4 py-10 text-white sm:px-6">
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div>
+            <EcoTaskLogo light />
+            <p className="mt-3 max-w-sm text-sm leading-6 text-white/55">
+              Making environmental participation easier, one task at a time.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-6 text-sm text-white/65">
-
-            <button
-              onClick={() => scrollToSection("home")}
-              className="transition hover:text-green-400"
-            >
-              Home
-            </button>
-
-            <button
-              onClick={() => scrollToSection("about")}
-              className="transition hover:text-green-400"
-            >
-              About
-            </button>
-
-            <button
-              onClick={() => scrollToSection("features")}
-              className="transition hover:text-green-400"
-            >
-              Features
-            </button>
-
-            <button
-              onClick={() => scrollToSection("contacts")}
-              className="transition hover:text-green-400"
-            >
-              Contacts
-            </button>
-
+            {NAV_LINKS.map((link) => (
+              <button key={link.id} onClick={() => scrollToSection(link.id)} className="transition hover:text-green-400">
+                {link.label}
+              </button>
+            ))}
           </div>
-
         </div>
-
 
         <div className="mx-auto mt-8 flex max-w-[1200px] flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/40 sm:flex-row">
           <span>© 2026 EcoTask. All rights reserved.</span>
-
-          <button
-            onClick={onAdmin}
-            className="flex items-center gap-1.5 transition hover:text-green-400"
-          >
+          <button onClick={onAdmin} className="flex items-center gap-1.5 transition hover:text-green-400">
             <ShieldCheck size={13} />
             Admin Portal
           </button>
         </div>
-
       </footer>
-
     </div>
   );
 }
@@ -1297,6 +1004,9 @@ function App() {
       }}
       onOrganizer={() => {
         goTo("organizer-login");
+      }}
+      onOrganizerRegister={() => {
+        goTo("organizer-register");
       }}
     />
   );
