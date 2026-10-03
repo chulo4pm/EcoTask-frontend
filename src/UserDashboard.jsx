@@ -2137,34 +2137,76 @@ function SettingsPage({ onProfileUpdated }) {
     confirmPassword: '',
   })
 
-  const handleEditClick = () => {
-    setFormState({
-      ...profile,
-      newPassword: '',
-      confirmPassword: '',
-    })
-    setFormError('')
-    setNotice('')
-    setIsEditing(true)
-  }
-
-  const handleCancel = () => {
-    setFormState({
-      ...profile,
-      newPassword: '',
-      confirmPassword: '',
-    })
-    setFormError('')
-    setIsEditing(false)
-  }
-
-  // Save confirmation: the volunteer must type their current password.
+  // Step 1: "Edit profile" asks for the current password (checked by the server).
+  // Step 2: the form unlocks; saving sends the same password again so the server re-checks it.
   const [currentPassword, setCurrentPassword] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [verifiedPassword, setVerifiedPassword] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [verifyError, setVerifyError] = useState('')
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const handleSaveClick = () => {
+  const getToken = () => JSON.parse(localStorage.getItem('userInfo') || '{}').token
+
+  const resetForm = () => setFormState({ ...profile, newPassword: '', confirmPassword: '' })
+
+  const handleEditClick = () => {
+    setNotice('')
+    setFormError('')
+    setVerifyError('')
+    setCurrentPassword('')
+    setShowSaveModal(true)
+  }
+
+  const closeVerifyModal = () => {
+    if (verifying) return
+    setShowSaveModal(false)
+    setCurrentPassword('')
+    setVerifyError('')
+  }
+
+  const handleVerify = async (e) => {
+    e?.preventDefault()
+    if (!currentPassword) {
+      setVerifyError('Enter your current password.')
+      return
+    }
+    try {
+      setVerifying(true)
+      setVerifyError('')
+      const response = await fetch(`${API_BASE_URL}/api/users/me/verify-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ currentPassword }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setVerifyError(data.message || 'Unable to confirm your password.')
+        return
+      }
+      setVerifiedPassword(currentPassword)
+      setCurrentPassword('')
+      setShowSaveModal(false)
+      resetForm()
+      setIsEditing(true)
+    } catch (error) {
+      setVerifyError(error.message === 'Failed to fetch' ? "Can't reach the server. Please try again." : error.message)
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handleCancel = () => {
+    resetForm()
+    setFormError('')
+    setVerifiedPassword('')
+    setIsEditing(false)
+  }
+
+  const handleSaveClick = async () => {
     setNotice('')
     const name = formState.fullName.trim()
     const phone = formState.phoneNumber.trim()
@@ -2181,27 +2223,9 @@ function SettingsPage({ onProfileUpdated }) {
       return
     }
     setFormError('')
-    setSaveError('')
-    setCurrentPassword('')
-    setShowSaveModal(true)
-  }
 
-  const closeSaveModal = () => {
-    if (saving) return
-    setShowSaveModal(false)
-    setCurrentPassword('')
-    setSaveError('')
-  }
-
-  const handleConfirmSave = async (e) => {
-    e?.preventDefault()
-    if (!currentPassword) {
-      setSaveError('Enter your current password.')
-      return
-    }
     try {
       setSaving(true)
-      setSaveError('')
       const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
       const response = await fetch(`${API_BASE_URL}/api/users/me`, {
         method: 'PATCH',
@@ -2210,20 +2234,20 @@ function SettingsPage({ onProfileUpdated }) {
           Authorization: `Bearer ${userInfo.token}`,
         },
         body: JSON.stringify({
-          currentPassword,
-          name: formState.fullName.trim(),
-          phone: formState.phoneNumber.trim(),
+          currentPassword: verifiedPassword,
+          name,
+          phone,
           newPassword: formState.newPassword || undefined,
         }),
       })
       const data = await response.json()
       if (!response.ok) {
-        // Wrong current password stays in the dialog; other problems go back to the form.
-        if (data.errors?.currentPassword || response.status === 429) {
-          setSaveError(data.message || 'Unable to save profile')
+        // Password no longer matches (e.g. changed on another device): ask again.
+        if (data.errors?.currentPassword) {
+          handleCancel()
+          setFormError('Please confirm your password again to edit your profile.')
           return
         }
-        setShowSaveModal(false)
         setFormError(data.message || 'Unable to save profile')
         return
       }
@@ -2239,12 +2263,11 @@ function SettingsPage({ onProfileUpdated }) {
       const { message, ...userFields } = data
       localStorage.setItem('userInfo', JSON.stringify({ ...userInfo, ...userFields }))
       onProfileUpdated?.(userFields)
-      setShowSaveModal(false)
-      setCurrentPassword('')
+      setVerifiedPassword('')
       setIsEditing(false)
       setNotice(message || 'Your profile changes have been saved.')
     } catch (error) {
-      setSaveError(error.message === 'Failed to fetch' ? "Can't reach the server. Please try again." : error.message)
+      setFormError(error.message === 'Failed to fetch' ? "Can't reach the server. Please try again." : error.message)
     } finally {
       setSaving(false)
     }
@@ -2328,7 +2351,7 @@ function SettingsPage({ onProfileUpdated }) {
             {isEditing && (
               <div className="grid grid-cols-1 gap-4 rounded-2xl border border-eco-100 bg-eco-50/40 p-4 sm:grid-cols-2">
                 <p className="text-xs font-semibold text-gray-500 sm:col-span-2">
-                  Leave the password fields empty to keep your current password.
+                  Leave the password fields empty to keep your current password. A new password logs you out of other devices.
                 </p>
                 <SettingsInput
                   label="New Password"
@@ -2357,11 +2380,11 @@ function SettingsPage({ onProfileUpdated }) {
 
           {isEditing && (
             <div className="mt-6 flex justify-end gap-2 border-t border-eco-100 pt-4">
-              <button onClick={handleCancel} className="eco-btn eco-btn-secondary">
+              <button onClick={handleCancel} disabled={saving} className="eco-btn eco-btn-secondary">
                 Cancel
               </button>
-              <button onClick={handleSaveClick} className="eco-btn eco-btn-primary">
-                Save changes
+              <button onClick={handleSaveClick} disabled={saving} className="eco-btn eco-btn-primary">
+                {saving ? 'Saving...' : 'Save changes'}
               </button>
             </div>
           )}
@@ -2370,16 +2393,15 @@ function SettingsPage({ onProfileUpdated }) {
 
       {showSaveModal && (
         <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0" onClick={closeSaveModal} />
-          <form onSubmit={handleConfirmSave} className="ecotask-modal-panel eco-modal relative z-10 w-full max-w-[380px] p-6">
+          <div className="absolute inset-0" onClick={closeVerifyModal} />
+          <form onSubmit={handleVerify} className="ecotask-modal-panel eco-modal relative z-10 w-full max-w-[380px] p-6">
             <div className="text-center">
               <span className="eco-icon-tile mx-auto h-12 w-12 rounded-2xl"><Lock size={20} /></span>
               <h2 className="mt-4 text-base font-extrabold text-gray-800">
                 Confirm it's you
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                Enter your current password to save your profile changes.
-                {formState.newPassword && ' Changing your password will log you out of other devices.'}
+                Enter your current password to edit your name, phone number, or password.
               </p>
             </div>
 
@@ -2389,19 +2411,19 @@ function SettingsPage({ onProfileUpdated }) {
                 type="password"
                 placeholder="Enter your current password"
                 value={currentPassword}
-                onChange={(val) => { setCurrentPassword(val); setSaveError('') }}
+                onChange={(val) => { setCurrentPassword(val); setVerifyError('') }}
                 autoFocus
                 autoComplete="current-password"
               />
-              {saveError && <p className="mt-1.5 text-xs font-semibold text-rose-600">{saveError}</p>}
+              {verifyError && <p className="mt-1.5 text-xs font-semibold text-rose-600">{verifyError}</p>}
             </div>
 
             <div className="mt-5 flex justify-center gap-2">
-              <button type="button" onClick={closeSaveModal} disabled={saving} className="eco-btn eco-btn-secondary">
+              <button type="button" onClick={closeVerifyModal} disabled={verifying} className="eco-btn eco-btn-secondary">
                 Cancel
               </button>
-              <button type="submit" disabled={saving} className="eco-btn eco-btn-primary px-6">
-                {saving ? 'Saving...' : 'Save changes'}
+              <button type="submit" disabled={verifying} className="eco-btn eco-btn-primary px-6">
+                {verifying ? 'Checking...' : 'Continue'}
               </button>
             </div>
           </form>
