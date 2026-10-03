@@ -49,6 +49,7 @@ const formatCountdown = (ms) => {
 import volunteer from "./assets/voluteer.jpg";
 import VerifyEmail from "./VerifyEmail";
 import { API_BASE_URL } from "./config";
+import { getRememberedEmail, applyRememberChoice } from "./rememberMe";
 
 
 /* =========================================================
@@ -152,6 +153,9 @@ function Login({
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // "Remember me": starts checked if an email was remembered last time.
+  const [rememberedEmail] = useState(getRememberedEmail);
+  const [remember, setRemember] = useState(() => Boolean(rememberedEmail));
   // Set when the account exists but the email isn't verified yet.
   const [verification, setVerification] = useState(null);
   const [lockedUntil, setLockedUntil] = useState(readLock);
@@ -247,6 +251,7 @@ function Login({
         return;
       }
 
+      applyRememberChoice(email, remember);
       localStorage.setItem('userInfo', JSON.stringify(data));
       onLogin();
     } catch (err) {
@@ -272,6 +277,7 @@ function Login({
       setError('Your email is verified. This account is not a volunteer account, so please use the matching login page.');
       return;
     }
+    applyRememberChoice(data.email || rememberedEmail, remember);
     localStorage.setItem('userInfo', JSON.stringify(data));
     onLogin();
   };
@@ -514,6 +520,7 @@ function Login({
                   type="email"
                   placeholder="Email address"
                   autoComplete="email"
+                  defaultValue={rememberedEmail}
                   required
                   disabled={isLocked}
                   className="
@@ -634,6 +641,8 @@ function Login({
 
                   <input
                     type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
                     className="w-4 h-4 accent-[#20b84b]"
                   />
 

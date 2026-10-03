@@ -373,7 +373,7 @@ export default function App({ onLogout }) {
               </button>
 
               {notificationOpen && (
-                <div className="eco-popover absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2rem))] p-4 text-eco-950">
+                <div className="eco-popover fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto p-4 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-none sm:w-[min(24rem,calc(100vw-2rem))] sm:overflow-visible text-eco-950">
                   <div className="mb-3 flex items-center justify-between border-b border-eco-100 pb-3">
                     <div className="flex items-center gap-2.5">
                       <span className="eco-icon-tile-soft h-8 w-8 rounded-lg">
