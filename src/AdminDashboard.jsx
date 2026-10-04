@@ -2350,30 +2350,76 @@ function VolunteerManagementView() {
 /* ==========================================
    ANNOUNCEMENTS VIEW
    ========================================== */
+// Announcement rules (match the backend in announcementController.js).
+const ANNOUNCEMENT_CATEGORIES = ['Important', 'Organizer Updates', 'General'];
+const TITLE_MAX = 100;
+const MESSAGE_MAX = 2000;
+
+// Category chips (shared by the post form and the edit card)
+const CategoryPicker = ({ value, onChange }) => (
+  <div className="flex flex-wrap gap-1.5">
+    {ANNOUNCEMENT_CATEGORIES.map((category) => (
+      <button
+        key={category}
+        type="button"
+        onClick={() => onChange(category)}
+        aria-pressed={value === category}
+        className={`eco-chip px-3 py-1.5 text-xs ${value === category ? 'eco-chip-active' : ''}`}
+      >
+        {category}
+      </button>
+    ))}
+  </div>
+);
+
+const CharCount = ({ value, max }) => (
+  <span className={`text-[11px] font-semibold ${value.length > max ? 'text-rose-600' : 'text-slate-400'}`}>
+    {value.length}/{max}
+  </span>
+);
+
 function AnnouncementsView() {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [formData, setFormData] = useState({
-    title: '',
-    category: '',
-    description: '',
-  });
-
+  const emptyForm = { title: '', category: 'General', description: '' };
+  const [formData, setFormData] = useState(emptyForm);
+  const [posting, setPosting] = useState(false);
   const [notification, setNotification] = useState('');
+  const [notificationType, setNotificationType] = useState('info'); // 'success' | 'info'
+
+  // Edit card: null when closed. `original` is used to know if anything changed.
+  const [editing, setEditing] = useState(null);
+  const [editOriginal, setEditOriginal] = useState(null);
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete confirmation card.
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const authHeaders = (json = false) => {
+    const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
+    return {
+      ...(json && { 'Content-Type': 'application/json' }),
+      Authorization: `Bearer ${adminInfo.token}`,
+    };
+  };
+
+  const notify = (message, type = 'info') => {
+    setNotification(message);
+    setNotificationType(type);
+  };
 
   useEffect(() => {
     const loadAnnouncements = async () => {
       try {
-        const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        const response = await fetch(`${API_BASE_URL}/api/announcements`, {
-          headers: { Authorization: `Bearer ${adminInfo.token}` },
-        });
+        const response = await fetch(`${API_BASE_URL}/api/announcements`, { headers: authHeaders() });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load announcements');
         setAnnouncements(data);
       } catch (requestError) {
-        setNotification(requestError.message);
+        notify(requestError.message);
       } finally {
         setLoading(false);
       }
@@ -2387,112 +2433,117 @@ function AnnouncementsView() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleClear = () => {
-    setFormData({ title: '', category: '', description: '' });
-  };
+  const handleClear = () => setFormData(emptyForm);
 
   const handlePost = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.description) {
-      setNotification('Please fill in both the title and description.');
-      setTimeout(() => setNotification(''), 3000);
+    if (formData.title.trim().length < 3 || formData.description.trim().length < 5) {
+      notify('Please add a title (at least 3 characters) and a message (at least 5 characters).');
       return;
     }
 
     try {
-      const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
+      setPosting(true);
       const response = await fetch(`${API_BASE_URL}/api/announcements`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminInfo.token}`,
-        },
+        headers: authHeaders(true),
         body: JSON.stringify({
-          title: formData.title,
-          category: formData.category || 'General',
-          description: formData.description,
+          title: formData.title.trim(),
+          category: formData.category,
+          description: formData.description.trim(),
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to post announcement');
       setAnnouncements((current) => [data, ...current]);
-      setFormData({ title: '', category: '', description: '' });
-      setNotification('Announcement posted successfully!');
+      setFormData(emptyForm);
+      notify('Announcement posted successfully!', 'success');
     } catch (requestError) {
-      setNotification(requestError.message);
+      notify(requestError.message);
+    } finally {
+      setPosting(false);
     }
   };
 
-  const handleDelete = async (id) => {
+  /* ---------- Delete (with confirmation) ---------- */
+  const confirmDelete = async () => {
     try {
-      const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-      const response = await fetch(`${API_BASE_URL}/api/announcements/${id}`, {
+      setDeleting(true);
+      setDeleteError('');
+      const response = await fetch(`${API_BASE_URL}/api/announcements/${deleteTarget._id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminInfo.token}` },
+        headers: authHeaders(),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to delete announcement');
-      setAnnouncements((current) => current.filter((announcement) => announcement._id !== id));
+      setAnnouncements((current) => current.filter((announcement) => announcement._id !== deleteTarget._id));
+      setDeleteTarget(null);
+      notify('Announcement deleted.', 'success');
     } catch (requestError) {
-      setNotification(requestError.message);
+      setDeleteError(requestError.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
-  // Edit card state: null when closed, otherwise the announcement being edited.
-  const [editing, setEditing] = useState(null);
-  const [editError, setEditError] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
-
+  /* ---------- Edit ---------- */
   const handleEdit = (announcement) => {
-    setEditError('');
-    setEditing({
+    const category = ANNOUNCEMENT_CATEGORIES.find(
+      (c) => c.toLowerCase() === String(announcement.category || '').toLowerCase()
+    ) || 'General';
+    const snapshot = {
       _id: announcement._id,
       title: announcement.title || '',
-      category: announcement.category || '',
+      category,
       description: announcement.description || announcement.message || '',
-    });
+    };
+    setEditError('');
+    setEditing(snapshot);
+    setEditOriginal({ ...snapshot, category: announcement.category || '' });
   };
 
   const closeEdit = () => {
     if (savingEdit) return;
     setEditing(null);
+    setEditOriginal(null);
     setEditError('');
   };
 
   const handleEditChange = (e) => {
     const { name, value } = e.target;
     setEditing((prev) => ({ ...prev, [name]: value }));
+    setEditError('');
   };
+
+  const editHasChanges = editing && editOriginal && (
+    editing.title.trim() !== editOriginal.title
+    || editing.category !== editOriginal.category
+    || editing.description.trim() !== editOriginal.description
+  );
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
+    if (!editHasChanges) return;
     const title = editing.title.trim();
     const description = editing.description.trim();
-    if (!title || !description) {
-      setEditError('Please fill in both the title and message.');
+    if (title.length < 3 || description.length < 5) {
+      setEditError('Please add a title (at least 3 characters) and a message (at least 5 characters).');
       return;
     }
 
     try {
       setSavingEdit(true);
-      const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
       const response = await fetch(`${API_BASE_URL}/api/announcements/${editing._id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminInfo.token}`,
-        },
-        body: JSON.stringify({
-          title,
-          category: editing.category.trim() || 'General',
-          description,
-          message: description,
-        }),
+        headers: authHeaders(true),
+        body: JSON.stringify({ title, category: editing.category, description }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to edit announcement');
       setAnnouncements((current) => current.map((item) => item._id === data._id ? data : item));
       setEditing(null);
+      setEditOriginal(null);
+      notify('Announcement updated.', 'success');
     } catch (requestError) {
       setEditError(requestError.message);
     } finally {
@@ -2502,7 +2553,7 @@ function AnnouncementsView() {
 
   if (loading) return <div className="eco-card mx-auto h-96 max-w-6xl animate-pulse bg-white/70" />;
 
-  const isSuccess = notification === 'Announcement posted successfully!';
+  const isSuccess = notificationType === 'success';
 
   return (
     <>
@@ -2517,52 +2568,44 @@ function AnnouncementsView() {
               isSuccess ? 'border-eco-200 bg-eco-50 text-eco-800' : 'border-amber-200 bg-amber-50 text-amber-800'
             }`}>
               {isSuccess ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <Bell className="h-4 w-4 shrink-0" />}
-              {notification}
+              <span className="flex-1">{notification}</span>
+              <button type="button" onClick={() => setNotification('')} aria-label="Dismiss" className="opacity-60 hover:opacity-100">
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label className="eco-label">Title</label>
+              <div className="flex items-center justify-between">
+                <label className="eco-label">Title</label>
+                <CharCount value={formData.title} max={TITLE_MAX} />
+              </div>
               <input
                 type="text"
                 name="title"
                 value={formData.title}
                 onChange={handleInputChange}
+                maxLength={TITLE_MAX}
                 placeholder="e.g. Change in Assembly Point"
                 className="eco-input"
               />
             </div>
             <div>
               <label className="eco-label">Category</label>
-              <input
-                type="text"
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-                placeholder="e.g. Important, Organizer Updates"
-                className="eco-input"
-              />
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {['Important', 'Organizer Updates', 'General'].map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, category }))}
-                    className={`eco-chip px-2.5 py-1 text-[11px] ${formData.category === category ? 'eco-chip-active' : ''}`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
+              <CategoryPicker value={formData.category} onChange={(category) => setFormData((prev) => ({ ...prev, category }))} />
             </div>
             <div>
-              <label className="eco-label">Message</label>
+              <div className="flex items-center justify-between">
+                <label className="eco-label">Message</label>
+                <CharCount value={formData.description} max={MESSAGE_MAX} />
+              </div>
               <textarea
                 rows={5}
                 name="description"
                 value={formData.description}
                 onChange={handleInputChange}
+                maxLength={MESSAGE_MAX}
                 placeholder="Type your announcement here..."
                 className="eco-input resize-y"
               />
@@ -2571,19 +2614,11 @@ function AnnouncementsView() {
         </div>
 
         <div className="flex justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-5 py-4">
-          <button
-            type="button"
-            onClick={handleClear}
-            className="eco-btn eco-btn-danger-soft"
-          >
+          <button type="button" onClick={handleClear} disabled={posting} className="eco-btn eco-btn-danger-soft">
             Clear
           </button>
-          <button
-            type="button"
-            onClick={handlePost}
-            className="eco-btn eco-btn-primary"
-          >
-            <Megaphone className="h-4 w-4" /> Post announcement
+          <button type="button" onClick={handlePost} disabled={posting} className="eco-btn eco-btn-primary">
+            <Megaphone className="h-4 w-4" /> {posting ? 'Posting...' : 'Post announcement'}
           </button>
         </div>
       </div>
@@ -2610,7 +2645,7 @@ function AnnouncementsView() {
                 >
                   <span className={`absolute inset-y-0 left-0 w-1 bg-gradient-to-b ${bar}`} />
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h4 className="text-sm font-extrabold text-slate-800">{item.title}</h4>
+                    <h4 className="text-sm font-extrabold text-slate-800 [overflow-wrap:anywhere]">{item.title}</h4>
                     {item.category && (
                       <span className={`eco-badge ${tone === 'red' ? 'eco-badge-red' : tone === 'blue' ? 'eco-badge-blue' : 'eco-badge-green'}`}>
                         {item.category}
@@ -2620,9 +2655,14 @@ function AnnouncementsView() {
 
                   <p className="mt-0.5 text-[11px] font-medium text-slate-400">
                     {item.author?.name || 'Admin'} • {item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Recently'}
+                    {item.editedAt && (
+                      <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-500" title={new Date(item.editedAt).toLocaleString()}>
+                        Edited · {new Date(item.editedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    )}
                   </p>
 
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600 [overflow-wrap:anywhere]">
+                  <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600 [overflow-wrap:anywhere]">
                     {item.description}
                   </p>
 
@@ -2631,7 +2671,7 @@ function AnnouncementsView() {
                       <Edit3 className="h-3.5 w-3.5 text-eco-600" /> Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(item._id)}
+                      onClick={() => { setDeleteError(''); setDeleteTarget(item); }}
                       className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -2678,60 +2718,76 @@ function AnnouncementsView() {
               </div>
             )}
             <div>
-              <label className="eco-label">Title</label>
+              <div className="flex items-center justify-between">
+                <label className="eco-label">Title</label>
+                <CharCount value={editing.title} max={TITLE_MAX} />
+              </div>
               <input
                 type="text"
                 name="title"
                 value={editing.title}
                 onChange={handleEditChange}
+                maxLength={TITLE_MAX}
                 className="eco-input"
                 autoFocus
               />
             </div>
             <div>
               <label className="eco-label">Category</label>
-              <input
-                type="text"
-                name="category"
-                value={editing.category}
-                onChange={handleEditChange}
-                placeholder="e.g. Important, Organizer Updates"
-                className="eco-input"
-              />
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {['Important', 'Organizer Updates', 'General'].map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setEditing((prev) => ({ ...prev, category }))}
-                    className={`eco-chip px-2.5 py-1 text-[11px] ${editing.category === category ? 'eco-chip-active' : ''}`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
+              <CategoryPicker value={editing.category} onChange={(category) => { setEditing((prev) => ({ ...prev, category })); setEditError(''); }} />
             </div>
             <div>
-              <label className="eco-label">Message</label>
+              <div className="flex items-center justify-between">
+                <label className="eco-label">Message</label>
+                <CharCount value={editing.description} max={MESSAGE_MAX} />
+              </div>
               <textarea
-                rows={5}
+                rows={6}
                 name="description"
                 value={editing.description}
                 onChange={handleEditChange}
+                maxLength={MESSAGE_MAX}
                 className="eco-input resize-y"
               />
             </div>
+            <p className="text-[11px] text-slate-400">Volunteers will see an "Edited" label on this announcement.</p>
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-5 py-4">
-            <button type="button" onClick={closeEdit} disabled={savingEdit} className="eco-btn eco-btn-danger-soft">
+          <div className="flex items-center justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-5 py-4">
+            {!editHasChanges && <span className="mr-auto text-[11px] font-semibold text-slate-400">No changes yet</span>}
+            <button type="button" onClick={closeEdit} disabled={savingEdit} className="eco-btn eco-btn-secondary">
               Cancel
             </button>
-            <button type="submit" disabled={savingEdit} className="eco-btn eco-btn-primary">
+            <button type="submit" disabled={savingEdit || !editHasChanges} className="eco-btn eco-btn-primary disabled:cursor-not-allowed disabled:opacity-50">
               <CheckCircle2 className="h-4 w-4" /> {savingEdit ? 'Saving...' : 'Save changes'}
             </button>
           </div>
         </form>
+      </div>
+    )}
+
+    {/* Delete Confirmation Card */}
+    {deleteTarget && (
+      <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-[60] flex items-center justify-center p-4 text-slate-800">
+        <div className="absolute inset-0" onClick={() => !deleting && setDeleteTarget(null)} />
+        <div className="ecotask-modal-panel eco-modal relative z-10 w-full max-w-sm p-6 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <Trash2 className="h-5 w-5" />
+          </span>
+          <h3 className="mt-4 text-base font-extrabold">Delete this announcement?</h3>
+          <p className="mt-1.5 text-sm text-slate-600">
+            <span className="font-semibold text-slate-800 [overflow-wrap:anywhere]">"{deleteTarget.title}"</span> will be removed for everyone. This can't be undone.
+          </p>
+          {deleteError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{deleteError}</p>}
+          <div className="mt-5 flex justify-center gap-2">
+            <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleting} className="eco-btn eco-btn-secondary">
+              Cancel
+            </button>
+            <button type="button" onClick={confirmDelete} disabled={deleting} className="eco-btn eco-btn-danger">
+              <Trash2 className="h-4 w-4" /> {deleting ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </div>
       </div>
     )}
     </>
@@ -2862,11 +2918,18 @@ function SettingsView({ onProfileChange, onSessionEnded }) {
   const [account, setAccount] = useState(null);
   const [loadError, setLoadError] = useState('');
 
-  // Profile form
-  const [profile, setProfile] = useState({ name: '', email: '', currentPassword: '' });
+  // Profile form. Locked until the admin confirms their current password.
+  // Only the name can change; the login email is fixed.
+  const [profile, setProfile] = useState({ name: '' });
   const [profileErrors, setProfileErrors] = useState({});
   const [profileNotice, setProfileNotice] = useState(null); // { type, text }
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileUnlocked, setProfileUnlocked] = useState(false);
+  const [verifiedPassword, setVerifiedPassword] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmPassword, setConfirmPasswordInput] = useState('');
+  const [confirmError, setConfirmError] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
   // Password form
   const emptyPasswords = { currentPassword: '', newPassword: '', confirmPassword: '' };
@@ -2902,50 +2965,94 @@ function SettingsView({ onProfileChange, onSessionEnded }) {
     request('/api/auth/me')
       .then((data) => {
         setAccount(data);
-        setProfile({ name: data.name || '', email: data.email || '', currentPassword: '' });
+        setProfile({ name: data.name || '' });
       })
       .catch((error) => setLoadError(error.message));
   }, []); // load once
 
-  const emailChanged = account && profile.email.trim().toLowerCase() !== (account.email || '').toLowerCase();
-  const profileChanged = account && (emailChanged || profile.name.trim().replace(/\s+/g, ' ') !== account.name);
+  const profileChanged = account && profile.name.trim().replace(/\s+/g, ' ') !== account.name;
 
-  const handleProfileChange = (e) => {
-    const { name, value } = e.target;
-    setProfile((prev) => ({ ...prev, [name]: value }));
+  const openConfirm = () => {
     setProfileNotice(null);
-    if (name === 'name') setProfileErrors((prev) => ({ ...prev, name: validateSettingsName(value) }));
-    if (name === 'email') setProfileErrors((prev) => ({ ...prev, email: validateSettingsEmail(value) }));
-    if (name === 'currentPassword') setProfileErrors((prev) => ({ ...prev, currentPassword: '' }));
+    setConfirmPasswordInput('');
+    setConfirmError('');
+    setShowConfirm(true);
   };
 
-  const saveProfile = async (e) => {
+  const closeConfirm = () => {
+    if (confirming) return;
+    setShowConfirm(false);
+    setConfirmPasswordInput('');
+    setConfirmError('');
+  };
+
+  // Step 1: check the current password with the server, then unlock the name field.
+  const confirmIdentity = async (e) => {
     e.preventDefault();
-    const errors = {
-      name: validateSettingsName(profile.name),
-      email: validateSettingsEmail(profile.email),
-      currentPassword: emailChanged && !profile.currentPassword ? 'Enter your current password to change your email.' : '',
-    };
-    setProfileErrors(errors);
-    if (Object.values(errors).some(Boolean)) return;
-    if (!profileChanged) {
-      setProfileNotice({ type: 'info', text: 'No changes to save.' });
+    if (!confirmPassword) {
+      setConfirmError('Enter your current password.');
       return;
     }
+    setConfirming(true);
+    setConfirmError('');
+    try {
+      await request('/api/users/me/verify-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: confirmPassword }),
+      });
+      setVerifiedPassword(confirmPassword);
+      setProfile({ name: account.name || '' });
+      setProfileErrors({});
+      setProfileUnlocked(true);
+      setShowConfirm(false);
+      setConfirmPasswordInput('');
+    } catch (error) {
+      setConfirmError(error.message);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const lockProfile = () => {
+    setProfileUnlocked(false);
+    setVerifiedPassword('');
+    setProfile({ name: account.name || '' });
+    setProfileErrors({});
+  };
+
+  const handleProfileChange = (e) => {
+    const { value } = e.target;
+    setProfile({ name: value });
+    setProfileNotice(null);
+    setProfileErrors({ name: validateSettingsName(value) });
+  };
+
+  // Step 2: save. The server checks the same password again.
+  const saveProfile = async (e) => {
+    e.preventDefault();
+    if (!profileChanged) return;
+    const nameError = validateSettingsName(profile.name);
+    setProfileErrors({ name: nameError });
+    if (nameError) return;
 
     setSavingProfile(true);
     try {
       const data = await request('/api/auth/me', {
         method: 'PUT',
-        body: JSON.stringify({ name: profile.name, email: profile.email, currentPassword: profile.currentPassword }),
+        body: JSON.stringify({ name: profile.name, currentPassword: verifiedPassword }),
       });
       saveSession(data.user);
-      setProfile({ name: data.user.name, email: data.user.email, currentPassword: '' });
+      setProfile({ name: data.user.name });
+      setProfileUnlocked(false);
+      setVerifiedPassword('');
       setProfileNotice({ type: 'success', text: data.message });
     } catch (error) {
-      setProfileNotice({ type: 'error', text: error.message });
-      if (/current password/i.test(error.message)) setProfileErrors((prev) => ({ ...prev, currentPassword: 'Current password is incorrect.' }));
-      if (/already used/i.test(error.message)) setProfileErrors((prev) => ({ ...prev, email: 'Email already in use.' }));
+      if (/current password/i.test(error.message)) {
+        lockProfile();
+        setProfileNotice({ type: 'error', text: 'Please confirm your password again to edit your profile.' });
+      } else {
+        setProfileNotice({ type: 'error', text: error.message });
+      }
     } finally {
       setSavingProfile(false);
     }
@@ -3044,37 +3151,97 @@ function SettingsView({ onProfileChange, onSessionEnded }) {
         )}
       </div>
 
-      {/* 2. EDIT PROFILE */}
+      {/* 2. EDIT PROFILE (locked until the current password is confirmed) */}
       <form onSubmit={saveProfile} noValidate className="eco-card overflow-hidden">
         <CardTitle icon={User}>Profile</CardTitle>
-        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
-          <div>
-            <label className="eco-label">Full name</label>
-            <input name="name" value={profile.name} onChange={handleProfileChange} maxLength={50} autoComplete="name" className={`eco-input ${settingsInputState(profileErrors.name)}`} />
-            <SettingsFieldError message={profileErrors.name} />
+        <div className="p-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="eco-label">Full name</label>
+              <input
+                name="name"
+                value={profile.name}
+                onChange={handleProfileChange}
+                disabled={!profileUnlocked}
+                maxLength={50}
+                autoComplete="name"
+                className={`eco-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${settingsInputState(profileErrors.name)}`}
+              />
+              <SettingsFieldError message={profileErrors.name} />
+            </div>
+            <div>
+              <label className="eco-label">Email address</label>
+              <input
+                type="email"
+                value={account.email || ''}
+                disabled
+                className="eco-input cursor-not-allowed bg-slate-100 text-slate-500"
+              />
+              <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+                <Lock className="h-3 w-3" /> Your login email can't be changed.
+              </p>
+            </div>
           </div>
-          <div>
-            <label className="eco-label">Email address</label>
-            <input type="email" name="email" value={profile.email} onChange={handleProfileChange} maxLength={100} autoComplete="email" className={`eco-input ${settingsInputState(profileErrors.email)}`} />
-            <SettingsFieldError message={profileErrors.email} />
-          </div>
-          {emailChanged && (
-            <div className="sm:col-span-2">
-              <label className="eco-label">Current password <span className="font-medium text-slate-400">(required to change your email)</span></label>
-              <div className="max-w-sm">
-                <PasswordInput name="currentPassword" value={profile.currentPassword} onChange={handleProfileChange} error={profileErrors.currentPassword} autoComplete="current-password" />
-              </div>
-              <SettingsFieldError message={profileErrors.currentPassword} />
+
+          {!profileUnlocked && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-eco-200 bg-eco-50/40 px-4 py-3">
+              <p className="text-xs text-slate-500">
+                <span className="font-bold text-slate-700">Profile is locked.</span> Confirm your password to edit your name.
+              </p>
+              <button type="button" onClick={openConfirm} className="eco-btn eco-btn-primary eco-btn-sm">
+                <Edit3 className="h-3.5 w-3.5" /> Edit profile
+              </button>
             </div>
           )}
+          {!profileUnlocked && profileNotice && (
+            <div className="mt-3"><SettingsNotice notice={profileNotice} /></div>
+          )}
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-6 py-4">
-          <SettingsNotice notice={profileNotice} />
-          <button type="submit" disabled={savingProfile} className="eco-btn eco-btn-primary">
-            {savingProfile ? 'Saving...' : 'Save profile'}
-          </button>
-        </div>
+
+        {profileUnlocked && (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-6 py-4">
+            {!profileChanged && <span className="mr-auto text-[11px] font-semibold text-slate-400">No changes yet</span>}
+            {profileChanged && <SettingsNotice notice={profileNotice} />}
+            <button type="button" onClick={lockProfile} disabled={savingProfile} className="eco-btn eco-btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" disabled={savingProfile || !profileChanged} className="eco-btn eco-btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+              {savingProfile ? 'Saving...' : 'Save profile'}
+            </button>
+          </div>
+        )}
       </form>
+
+      {showConfirm && (
+        <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-[70] flex items-center justify-center p-4 text-slate-800">
+          <div className="absolute inset-0" onClick={closeConfirm} />
+          <form onSubmit={confirmIdentity} noValidate className="ecotask-modal-panel eco-modal relative z-10 w-full max-w-sm p-6">
+            <span className="eco-icon-tile mx-auto h-12 w-12 rounded-2xl"><Lock className="h-5 w-5" /></span>
+            <h3 className="mt-4 text-center text-base font-extrabold">Confirm it's you</h3>
+            <p className="mt-1.5 text-center text-sm text-slate-600">Enter your current password to edit your profile.</p>
+            <div className="mt-5">
+              <label className="eco-label">Current password</label>
+              <PasswordInput
+                name="confirmCurrentPassword"
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPasswordInput(e.target.value); setConfirmError(''); }}
+                error={confirmError}
+                placeholder="Enter your current password"
+                autoComplete="current-password"
+              />
+              <SettingsFieldError message={confirmError} />
+            </div>
+            <div className="mt-5 flex justify-center gap-2">
+              <button type="button" onClick={closeConfirm} disabled={confirming} className="eco-btn eco-btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" disabled={confirming} className="eco-btn eco-btn-primary">
+                {confirming ? 'Checking...' : 'Continue'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* 1. CHANGE PASSWORD */}
       <form onSubmit={savePassword} noValidate className="eco-card overflow-hidden">

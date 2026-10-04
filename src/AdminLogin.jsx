@@ -68,7 +68,7 @@ function EcoTaskLogo() {
    ADMIN LOGIN
 ========================================================= */
 
-function AdminLogin({ onBack, onAdminLogin }) {
+function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
 
   const [showPassword, setShowPassword] =
     useState(false);
@@ -506,6 +506,21 @@ function AdminLogin({ onBack, onAdminLogin }) {
 
 
               </div>
+
+
+              {/* FORGOT PASSWORD */}
+
+              {onForgotPassword && (
+                <div className="-mt-2 mb-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onForgotPassword}
+                    className="text-sm font-semibold !text-[#159447] hover:underline"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
 
 
               {/* =================================================

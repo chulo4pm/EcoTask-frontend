@@ -2045,6 +2045,7 @@ function Announcement() {
                 category={item.category}
                 tone={categoryTone(item.category)}
                 posted={`${item.author?.name || 'Admin'} • ${new Date(item.createdAt).toLocaleString()}`}
+                editedAt={item.editedAt}
                 text={item.description || item.message}
                 highlight
               />
@@ -2068,6 +2069,7 @@ function Announcement() {
                 category={item.category}
                 tone={categoryTone(item.category)}
                 posted={`${item.author?.name || 'Admin'} • ${new Date(item.createdAt).toLocaleString()}`}
+                editedAt={item.editedAt}
                 text={item.description || item.message}
               />
             ))}
@@ -2085,7 +2087,7 @@ function Announcement() {
   )
 }
 
-function AnnouncementCard({ icon, title, category, tone = 'green', posted, text, highlight = false }) {
+function AnnouncementCard({ icon, title, category, tone = 'green', posted, editedAt, text, highlight = false }) {
   const toneStyles = {
     green: { bar: 'from-eco-400 to-eco-700', tile: 'eco-icon-tile', badge: 'eco-badge-green' },
     red: { bar: 'from-red-300 to-red-500', tile: 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600', badge: 'eco-badge-red' },
@@ -2104,9 +2106,16 @@ function AnnouncementCard({ icon, title, category, tone = 'green', posted, text,
             {category && <span className={`eco-badge ${toneStyles.badge}`}>{category}</span>}
           </div>
 
-          <p className="mt-0.5 text-xs font-medium text-gray-400">{posted}</p>
+          <p className="mt-0.5 text-xs font-medium text-gray-400">
+            {posted}
+            {editedAt && (
+              <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-gray-500" title={new Date(editedAt).toLocaleString()}>
+                Edited · {new Date(editedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </span>
+            )}
+          </p>
 
-          <p className="mt-2.5 text-sm leading-relaxed text-gray-600 [overflow-wrap:anywhere]">{text}</p>
+          <p className="mt-2.5 whitespace-pre-line text-sm leading-relaxed text-gray-600 [overflow-wrap:anywhere]">{text}</p>
         </div>
       </div>
     </article>

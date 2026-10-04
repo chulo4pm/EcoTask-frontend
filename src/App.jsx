@@ -178,6 +178,7 @@ const FEATURES = [
 ];
 
 const FAQS = [
+  { q: "Is EcoTask free?", a: "Yes. Volunteer and organizer accounts are both free." },
   { q: "How do I become an organizer?", a: "Apply as an organizer and upload a verification document. The EcoTask admin reviews it, and once approved you can post activities." },
   { q: "How do I get my certificate?", a: "After the activity, the organizer marks attendance and issues certificates. You can download yours from your dashboard." },
   { q: "Can I leave an activity after joining?", a: "Yes. You can leave an activity from your dashboard before it happens." },
@@ -852,6 +853,10 @@ function App() {
         }}
         onAdminLogin={() => {
           goTo("admin");
+        }}
+        onForgotPassword={() => {
+          setResetFrom("admin-login");
+          goTo("forgot-password");
         }}
       />
     );
