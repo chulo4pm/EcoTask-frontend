@@ -458,7 +458,10 @@ function OrganizerWorkspace({ account, onLogout }) {
           </div>
 
           <div className="flex items-center gap-2.5">
-          <NotificationBell storageKey="organizerInfo" />
+          <NotificationBell
+            storageKey="organizerInfo"
+            onOpen={(item) => setActiveTab(item.type === 'volunteer_joined' ? 'Manage Activities' : 'Dashboard')}
+          />
           <div className="relative flex items-center">
             <button
               type="button"

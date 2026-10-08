@@ -225,7 +225,13 @@ export default function AdminDashboard({ onLogout }) {
 
           {/* HEADER CONTROLS */}
           <div className="flex items-center gap-2.5">
-            <NotificationBell storageKey="adminInfo" />
+            <NotificationBell
+              storageKey="adminInfo"
+              onOpen={(item) => {
+                if (item.type === 'organizer_application') setActiveTab('Organizer Approvals');
+                else setActiveTab('Dashboard');
+              }}
+            />
 
             {/* Profile Dropdown */}
             <div className="relative flex items-center">

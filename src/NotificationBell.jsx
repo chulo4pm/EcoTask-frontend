@@ -19,7 +19,7 @@ const readToken = (storageKey) => {
 };
 
 
-export default function NotificationBell({ storageKey }) {
+export default function NotificationBell({ storageKey, onOpen }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -54,6 +54,13 @@ export default function NotificationBell({ storageKey }) {
     setItems((list) => list.map((n) => (n._id === item._id ? { ...n, read: true } : n)));
     setUnreadCount((c) => Math.max(0, c - 1));
     try { await notificationRequest(readToken(storageKey), `/${item._id}/read`, 'PATCH'); } catch { load(); }
+  };
+
+  // Click = mark read, close the list, and take the user to the related page.
+  const handleItemClick = (item) => {
+    markRead(item);
+    setOpen(false);
+    if (onOpen) onOpen(item);
   };
 
   const markAllRead = async () => {
@@ -109,7 +116,7 @@ export default function NotificationBell({ storageKey }) {
                 <button
                   key={item._id}
                   type="button"
-                  onClick={() => markRead(item)}
+                  onClick={() => handleItemClick(item)}
                   className={`flex w-full gap-3 rounded-xl border p-3 text-left text-xs transition hover:border-eco-300 ${
                     item.read ? 'border-slate-100 bg-white' : 'border-eco-200 bg-eco-50/60'
                   }`}

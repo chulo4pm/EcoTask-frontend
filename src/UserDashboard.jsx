@@ -148,7 +148,7 @@ export default function App({ onLogout }) {
         const SERVER_TYPES = {
           announcement: { type: 'ANNOUNCEMENT', actionText: 'View announcement' },
           activity_updated: { type: 'SCHEDULE', actionText: 'View schedule' },
-          activity_cancelled: { type: 'ACTIVITY', actionText: 'View activities' },
+          activity_cancelled: { type: 'SCHEDULE', actionText: 'View schedule' },
           attendance_marked: { type: 'RECORD', actionText: 'View record' },
         }
         const serverNotifications = (serverData.notifications || []).map((item) => {
