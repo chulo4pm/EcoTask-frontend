@@ -65,6 +65,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
+  Ban,
+  RefreshCw,
   Bell,
   LayoutDashboard,
   Calendar,
@@ -144,6 +146,46 @@ const rememberReminders = (userId, field, ids) => {
   } catch { /* storage blocked: the reminder just shows as new again */ }
 }
 
+/* =========================================================
+   SUSPENDED SCREEN (same as the organizer's)
+   The admin suspended this volunteer: show the reason instead
+   of the dashboard. "Check again" re-asks the server.
+========================================================= */
+
+function VolunteerSuspendedScreen({ name, reason, checking, onRefresh, onLogout }) {
+  return (
+    <div className="eco-app-bg flex min-h-screen items-center justify-center p-4">
+      <div className="eco-card w-full max-w-lg overflow-hidden text-slate-800">
+        <div className="flex flex-col items-center px-6 pb-6 pt-8 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-rose-600">
+            <Ban className="h-7 w-7" />
+          </span>
+          <h1 className="mt-4 text-xl font-extrabold">Account suspended</h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            The admin has suspended {name ? <span className="font-bold">{name}</span> : 'your account'}.
+            You can't join activities or use EcoTask until it's reactivated.
+          </p>
+          {reason && (
+            <div className="mt-4 w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-left text-sm text-rose-800">
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-600">Reason</p>
+              <p className="mt-1 [overflow-wrap:anywhere]">{reason}</p>
+            </div>
+          )}
+          <p className="mt-4 text-xs text-slate-500">If you think this is a mistake, please contact the EcoTask admin.</p>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-eco-100 bg-eco-50/40 px-6 py-4">
+          <button type="button" onClick={onRefresh} disabled={checking} className="eco-btn eco-btn-secondary">
+            <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} /> Check again
+          </button>
+          <button type="button" onClick={onLogout} className="eco-btn eco-btn-primary">
+            <LogOut className="h-4 w-4" /> Log out
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App({ onLogout }) {
   const [activePage, setActivePage] = useState('dashboard')
   const [profileOpen, setProfileOpen] = useState(false)
@@ -156,6 +198,38 @@ export default function App({ onLogout }) {
       return {}
     }
   })
+
+  // Set when the admin has suspended this account: { reason }
+  const [suspension, setSuspension] = useState(null)
+  const [checkingStatus, setCheckingStatus] = useState(false)
+
+  const checkAccountStatus = async () => {
+    if (!currentUser.token) return
+    setCheckingStatus(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${currentUser.token}` },
+      })
+      const data = await response.json().catch(() => ({}))
+      if (response.status === 403 && data.suspended) {
+        setSuspension({ reason: data.suspendedReason || '' })
+      } else if (response.ok) {
+        setSuspension(null)
+      }
+    } catch {
+      // Offline: keep showing whatever we showed before.
+    } finally {
+      setCheckingStatus(false)
+    }
+  }
+
+  // Check on load, then every minute, so a suspension takes effect without a refresh.
+  useEffect(() => {
+    checkAccountStatus()
+    const timer = window.setInterval(checkAccountStatus, 60000)
+    return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser.token])
 
   const displayName = currentUser.name || 'Volunteer'
   const initials = displayName
@@ -368,6 +442,24 @@ export default function App({ onLogout }) {
       </div>
     </div>
   )
+
+  if (suspension) {
+    return (
+      <VolunteerSuspendedScreen
+        name={currentUser.name}
+        reason={suspension.reason}
+        checking={checkingStatus}
+        onRefresh={checkAccountStatus}
+        onLogout={() => {
+          if (onLogout) onLogout()
+          else {
+            localStorage.removeItem('userInfo')
+            window.location.href = '/'
+          }
+        }}
+      />
+    )
+  }
 
   return (
     <div className="eco-app-bg flex h-screen w-screen overflow-hidden font-sans text-eco-950 antialiased">

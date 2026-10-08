@@ -2020,6 +2020,11 @@ function VolunteerManagementView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
+  // Suspension (same flow as organizers): reason required, can be undone.
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [suspendTarget, setSuspendTarget] = useState(null);
+  const [reactivateTarget, setReactivateTarget] = useState(null);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -2047,10 +2052,35 @@ function VolunteerManagementView() {
     loadUsers();
   }, []);
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const suspendedCount = users.filter((user) => user.isSuspended).length;
+  const filteredUsers = users.filter((user) => (
+    (statusFilter === 'all' || (statusFilter === 'suspended' ? user.isSuspended : !user.isSuspended)) &&
+    (user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  ));
+
+  // Apply the server's answer to the list (and the open details card).
+  const applyVolunteer = (updated, message) => {
+    const merge = (user) => (user._id === updated._id ? { ...user, ...updated } : user);
+    setUsers((current) => current.map(merge));
+    setSelectedUser((current) => (current ? merge(current) : current));
+    setNotice(message);
+    setSuspendTarget(null);
+    setReactivateTarget(null);
+  };
+
+  const suspendVolunteer = async (reason) => {
+    const data = await adminFetch(`/api/admin/volunteers/${suspendTarget._id}/suspend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+    applyVolunteer(data.volunteer, data.message);
+  };
+
+  const reactivateVolunteer = async () => {
+    const data = await adminFetch(`/api/admin/volunteers/${reactivateTarget._id}/reactivate`, { method: 'PATCH' });
+    applyVolunteer(data.volunteer, data.message);
+  };
 
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
@@ -2090,19 +2120,28 @@ function VolunteerManagementView() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 text-slate-800">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Total volunteers" value={users.length} icon={Users} />
         <StatTile label="Active in activities" value={users.filter((user) => (user.activities || 0) > 0).length} icon={UserCheck} />
         <StatTile label="Not yet joined" value={users.filter((user) => !(user.activities > 0)).length} icon={UserX} />
+        <StatTile label="Suspended" value={suspendedCount} icon={Ban} />
       </div>
+
+      {notice && <div className="rounded-xl border border-eco-200 bg-eco-50 px-4 py-3 text-sm font-semibold text-eco-800">{notice}</div>}
 
       <div className="eco-card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-eco-100 p-4">
-          <h3 className="eco-section-title">
-            <span className="eco-icon-tile h-8 w-8 rounded-lg"><Users className="h-[15px] w-[15px]" /></span>
-            Volunteers
-            <span className="eco-badge eco-badge-green">{filteredUsers.length}</span>
-          </h3>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['all', 'All', users.length],
+              ['active', 'Active', users.length - suspendedCount],
+              ['suspended', 'Suspended', suspendedCount],
+            ].map(([key, label, count]) => (
+              <button key={key} type="button" onClick={() => setStatusFilter(key)} className={`eco-chip ${statusFilter === key ? 'eco-chip-active' : ''}`}>
+                {label} <span className="eco-chip-count">{count}</span>
+              </button>
+            ))}
+          </div>
           <div className="flex w-full items-center gap-2 rounded-xl border border-eco-100 bg-eco-50/50 px-3.5 py-2.5 text-slate-700 transition focus-within:border-eco-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-eco-200/40 sm:w-80">
             <Search className="h-4 w-4 text-eco-600" />
             <input
@@ -2144,10 +2183,14 @@ function VolunteerManagementView() {
                     <td><span className="eco-badge eco-badge-gray capitalize">{user.role}</span></td>
                     <td className="font-extrabold text-slate-800">{user.activities || 0}</td>
                     <td>
-                      <span className="eco-badge eco-badge-green">
-                        <span className="h-1.5 w-1.5 rounded-full bg-eco-500" />
-                        {user.status || 'Active'}
-                      </span>
+                      {user.isSuspended ? (
+                        <span className="eco-badge eco-badge-red" title={user.suspendedReason}>Suspended</span>
+                      ) : (
+                        <span className="eco-badge eco-badge-green">
+                          <span className="h-1.5 w-1.5 rounded-full bg-eco-500" />
+                          Active
+                        </span>
+                      )}
                     </td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -2157,6 +2200,15 @@ function VolunteerManagementView() {
                         >
                           View
                         </button>
+                        {user.isSuspended ? (
+                          <button type="button" onClick={() => setReactivateTarget(user)} className="eco-btn eco-btn-secondary eco-btn-sm">
+                            Reactivate
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => setSuspendTarget(user)} className="eco-btn eco-btn-danger-soft eco-btn-sm">
+                            Suspend
+                          </button>
+                        )}
                         <button
                           onClick={() => setUserToDelete(user)}
                           aria-label={`Delete ${user.name}`}
@@ -2171,7 +2223,7 @@ function VolunteerManagementView() {
               ) : (
                 <tr>
                   <td colSpan={6} className="py-10 text-center text-slate-400">
-                    No users found matching your search.
+                    {statusFilter === 'suspended' && !searchTerm ? 'No suspended volunteers.' : 'No users found matching your search.'}
                   </td>
                 </tr>
               )}
@@ -2199,8 +2251,17 @@ function VolunteerManagementView() {
                 {getInitials(selectedUser.name)}
               </span>
               <p className="mt-3 text-base font-extrabold text-slate-800">{selectedUser.name}</p>
-              <span className="eco-badge eco-badge-green mt-1.5">{selectedUser.status || 'Active'}</span>
+              <span className={`eco-badge mt-1.5 ${selectedUser.isSuspended ? 'eco-badge-red' : 'eco-badge-green'}`}>
+                {selectedUser.isSuspended ? 'Suspended' : 'Active'}
+              </span>
             </div>
+
+            {selectedUser.isSuspended && (
+              <div className="mx-6 mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+                <p className="font-bold">Suspended on {formatShortDate(selectedUser.suspendedAt)}</p>
+                <p className="mt-0.5 [overflow-wrap:anywhere]">{selectedUser.suspendedReason}</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2.5 p-6 text-xs">
               {[
@@ -2217,7 +2278,16 @@ function VolunteerManagementView() {
               ))}
             </div>
 
-            <div className="flex justify-end border-t border-eco-100 px-6 py-4">
+            <div className="flex justify-end gap-2 border-t border-eco-100 px-6 py-4">
+              {selectedUser.isSuspended ? (
+                <button type="button" onClick={() => setReactivateTarget(selectedUser)} className="eco-btn eco-btn-secondary">
+                  <RotateCcw className="h-4 w-4" /> Reactivate
+                </button>
+              ) : (
+                <button type="button" onClick={() => setSuspendTarget(selectedUser)} className="eco-btn eco-btn-danger-soft">
+                  <Ban className="h-4 w-4" /> Suspend
+                </button>
+              )}
               <button
                 onClick={() => setSelectedUser(null)}
                 className="eco-btn eco-btn-primary"
@@ -2227,6 +2297,30 @@ function VolunteerManagementView() {
             </div>
           </div>
         </div>
+      )}
+
+      {suspendTarget && (
+        <ReasonModal
+          title={`Suspend ${suspendTarget.name}?`}
+          description="They won't be able to log in or join activities until you reactivate the account. Their activity history and certificates are kept."
+          label="Reason"
+          placeholder="e.g. Repeatedly registered and did not attend."
+          confirmLabel="Suspend volunteer"
+          danger
+          required
+          onConfirm={suspendVolunteer}
+          onClose={() => setSuspendTarget(null)}
+        />
+      )}
+
+      {reactivateTarget && (
+        <ReasonModal
+          title={`Reactivate ${reactivateTarget.name}?`}
+          description="They can log in and join activities again."
+          confirmLabel="Reactivate"
+          onConfirm={reactivateVolunteer}
+          onClose={() => setReactivateTarget(null)}
+        />
       )}
 
       {/* CONFIRM DELETE MODAL */}
