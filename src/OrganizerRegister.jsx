@@ -302,6 +302,17 @@ function OrganizerRegister({
   const [submitting, setSubmitting] = useState(false);
   // Set after sign-up: shows the "enter your code" screen.
   const [verification, setVerification] = useState(null);
+  // Props for the code screen, or null while the user is on the form. Going back
+  // from the code screen keeps `verification` so they can return without a new code.
+  const [codeScreen, setCodeScreen] = useState(null);
+
+  const openCodeScreen = (data, receivedAt) => {
+    const elapsed = Math.floor((Date.now() - receivedAt) / 1000);
+    setCodeScreen({
+      resendAvailableIn: Math.max(0, (Number(data.resendAvailableIn) || 0) - elapsed),
+      expiresIn: Math.max(0, (Number(data.expiresIn) || 10 * 60) - elapsed),
+    });
+  };
 
   const [showPassword, setShowPassword] =
     useState(false);
@@ -448,7 +459,9 @@ function OrganizerRegister({
       }
 
       // Account created: confirm the email first, then it waits for admin approval.
-      setVerification(data);
+      const receivedAt = Date.now();
+      setVerification({ ...data, receivedAt });
+      openCodeScreen(data, receivedAt);
     } catch (err) {
       setFormError(
         err.message === "Failed to fetch"
@@ -461,17 +474,17 @@ function OrganizerRegister({
   };
 
 
-  if (verification) {
+  if (verification && codeScreen) {
     return (
       <VerifyEmail
         email={verification.email}
         message={verification.message}
         emailSent={verification.emailSent}
-        resendAvailableIn={verification.resendAvailableIn}
-        expiresIn={verification.expiresIn}
+        resendAvailableIn={codeScreen.resendAvailableIn}
+        expiresIn={codeScreen.expiresIn}
         // Email confirmed - continue to the usual "wait for admin approval" screen.
         onVerified={() => onRegistered?.()}
-        onBack={() => setVerification(null)}
+        onBack={() => setCodeScreen(null)}
       />
     );
   }
@@ -745,6 +758,24 @@ function OrganizerRegister({
           {/* =================================================
               FORM
           ================================================= */}
+
+          {verification && !codeScreen && (
+            <div
+              role="status"
+              className="mx-auto mt-6 flex w-full max-w-[460px] flex-wrap items-center justify-between gap-3 rounded-md border border-[#cfe9d6] bg-[#f3fbf5] px-4 py-3 text-left text-[13px] font-medium text-[#2f6b43]"
+            >
+              <span>
+                We sent a code to <span className="break-all font-semibold">{verification.email}</span>.
+              </span>
+              <button
+                type="button"
+                onClick={() => openCodeScreen(verification, verification.receivedAt)}
+                className="rounded-md bg-[#16b83b] px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#12a834]"
+              >
+                Enter code
+              </button>
+            </div>
+          )}
 
           <form
             onSubmit={handleSubmit}
