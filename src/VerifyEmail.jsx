@@ -1,5 +1,7 @@
 import { AlertCircle, ArrowLeft, CheckCircle2, MailCheck, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import CodeCountdown from "./CodeCountdown";
+import { CODE_TTL_SECONDS, useSecondsLeft } from "./codeTimer";
 import { API_BASE_URL } from "./config";
 
 
@@ -14,6 +16,7 @@ import { API_BASE_URL } from "./config";
      message          - optional note from the server (e.g. "We sent a code…")
      emailSent        - false if the server couldn't send the first email
      resendAvailableIn- seconds before "Resend code" is allowed
+     expiresIn        - seconds until the emailed code expires (default 10 min)
      onVerified(data) - called with the server response (includes token)
      onBack()         - go back to the previous screen
 ========================================================= */
@@ -55,6 +58,7 @@ function VerifyEmail({
   message = "",
   emailSent = true,
   resendAvailableIn = 60,
+  expiresIn = CODE_TTL_SECONDS,
   onVerified,
   onBack,
 }) {
@@ -69,11 +73,15 @@ function VerifyEmail({
   const [cooldownUntil, setCooldownUntil] = useState(
     () => Date.now() + Math.max(0, Number(resendAvailableIn) || 0) * 1000
   );
+  const [expiresAt, setExpiresAt] = useState(
+    () => Date.now() + Math.max(0, Number(expiresIn) || CODE_TTL_SECONDS) * 1000
+  );
   const [now, setNow] = useState(() => Date.now());
   const inputs = useRef([]);
 
   const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
   const code = digits.join("");
+  const expired = useSecondsLeft(expiresAt) <= 0;
 
 
   // Countdown for the resend button.
@@ -89,7 +97,7 @@ function VerifyEmail({
 
 
   const submitCode = async (fullCode) => {
-    if (submitting || verified || fullCode.length !== CODE_LENGTH) return;
+    if (submitting || verified || expired || fullCode.length !== CODE_LENGTH) return;
 
     setSubmitting(true);
     setError("");
@@ -173,6 +181,8 @@ function VerifyEmail({
 
       if (!res.ok) throw new Error(data.message || "Couldn't resend the code.");
 
+      setExpiresAt(Date.now() + (Number(data.expiresIn) || CODE_TTL_SECONDS) * 1000);
+
       setDigits(Array(CODE_LENGTH).fill(""));
       inputs.current[0]?.focus();
       setInfo(data.message || "A new code was sent.");
@@ -214,8 +224,12 @@ function VerifyEmail({
         <p className="mx-auto mt-3 max-w-[380px] text-center text-[13px] leading-6 text-[#4b5563]">
           Enter the 6-digit code we sent to{" "}
           <span className="font-semibold text-[#1f2937] break-all">{email}</span>.
-          The code expires in 10 minutes. Check your spam folder if you don't see it.
+          Check your spam folder if you don't see it.
         </p>
+
+        <div className="mt-4 flex justify-center">
+          <CodeCountdown expiresAt={expiresAt} />
+        </div>
 
         <form
           noValidate
@@ -266,7 +280,7 @@ function VerifyEmail({
 
           <button
             type="submit"
-            disabled={code.length !== CODE_LENGTH || submitting || verified}
+            disabled={code.length !== CODE_LENGTH || submitting || verified || expired}
             className="mt-6 h-[52px] w-full rounded-md bg-[#16b83b] text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#12a834] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {verified ? "Verified" : submitting ? "Verifying..." : "Verify Email"}

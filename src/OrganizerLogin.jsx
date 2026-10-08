@@ -244,6 +244,7 @@ function OrganizerLogin({
         message={verification.message}
         emailSent={verification.emailSent}
         resendAvailableIn={verification.resendAvailableIn}
+        expiresIn={verification.expiresIn}
         onVerified={handleVerified}
         onBack={() => setVerification(null)}
       />

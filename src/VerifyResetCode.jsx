@@ -1,7 +1,9 @@
 import { AlertCircle, ArrowLeft, MailCheck, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
-import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY } from "./ForgotPassword";
+import CodeCountdown from "./CodeCountdown";
+import { CODE_TTL_SECONDS, useSecondsLeft } from "./codeTimer";
+import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY, RESET_EXPIRES_KEY } from "./ForgotPassword";
 import { API_BASE_URL } from "./config";
 
 
@@ -63,11 +65,13 @@ function VerifyResetCode({ email: emailProp, onBack, onVerified }) {
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState(() => Number(readSession(RESET_COOLDOWN_KEY)) || 0);
+  const [expiresAt, setExpiresAt] = useState(() => Number(readSession(RESET_EXPIRES_KEY)) || 0);
   const [now, setNow] = useState(() => Date.now());
   const inputs = useRef([]);
 
   const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
   const code = digits.join("");
+  const expired = useSecondsLeft(expiresAt) <= 0;
 
 
   useEffect(() => {
@@ -82,7 +86,7 @@ function VerifyResetCode({ email: emailProp, onBack, onVerified }) {
 
 
   const submitCode = async (fullCode) => {
-    if (submitting || fullCode.length !== CODE_LENGTH) return;
+    if (submitting || expired || fullCode.length !== CODE_LENGTH) return;
 
     setSubmitting(true);
     setError("");
@@ -170,6 +174,10 @@ function VerifyResetCode({ email: emailProp, onBack, onVerified }) {
       writeSession(RESET_COOLDOWN_KEY, until);
 
       if (!res.ok) throw new Error(data.message || "Couldn't resend the code.");
+
+      const newExpiry = Date.now() + (Number(data.expiresIn) || CODE_TTL_SECONDS) * 1000;
+      setExpiresAt(newExpiry);
+      writeSession(RESET_EXPIRES_KEY, newExpiry);
 
       setDigits(Array(CODE_LENGTH).fill(""));
       inputs.current[0]?.focus();
@@ -262,7 +270,11 @@ function VerifyResetCode({ email: emailProp, onBack, onVerified }) {
             ) : (
               <>
                 <p className="text-sm leading-6 text-[#6b7280]">We sent a 6-digit verification code to</p>
-                <p className="mb-7 font-semibold text-[#159447] break-all">{email}</p>
+                <p className="mb-4 font-semibold text-[#159447] break-all">{email}</p>
+
+                <div className="mb-6 flex justify-center">
+                  <CodeCountdown expiresAt={expiresAt} />
+                </div>
 
                 <form noValidate onSubmit={(e) => { e.preventDefault(); submitCode(code); }}>
 
@@ -307,7 +319,7 @@ function VerifyResetCode({ email: emailProp, onBack, onVerified }) {
 
                   <button
                     type="submit"
-                    disabled={code.length !== CODE_LENGTH || submitting}
+                    disabled={code.length !== CODE_LENGTH || submitting || expired}
                     className="mt-8 w-full min-h-[54px] bg-[#16b941] hover:bg-[#12a83a] text-white font-semibold rounded-md transition shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting ? "Checking..." : "Verify Code"}

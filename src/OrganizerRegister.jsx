@@ -468,6 +468,7 @@ function OrganizerRegister({
         message={verification.message}
         emailSent={verification.emailSent}
         resendAvailableIn={verification.resendAvailableIn}
+        expiresIn={verification.expiresIn}
         // Email confirmed - continue to the usual "wait for admin approval" screen.
         onVerified={() => onRegistered?.()}
         onBack={() => setVerification(null)}

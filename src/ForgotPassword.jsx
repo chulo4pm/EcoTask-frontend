@@ -16,6 +16,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // The Reset Password page reads these, so the user doesn't have to type the email twice.
 export const RESET_EMAIL_KEY = "ecotaskResetEmail";
 export const RESET_COOLDOWN_KEY = "ecotaskResetCooldownUntil";
+export const RESET_EXPIRES_KEY = "ecotaskResetCodeExpiresAt";
 export const RESET_CODE_KEY = "ecotaskResetCode"; // set once the code is confirmed
 
 const remember = (key, value) => {
@@ -129,6 +130,7 @@ function ForgotPassword({
       const wait = Number(data.resendAvailableIn) || 60;
       remember(RESET_EMAIL_KEY, cleanEmail);
       remember(RESET_COOLDOWN_KEY, Date.now() + wait * 1000);
+      remember(RESET_EXPIRES_KEY, Date.now() + (Number(data.expiresIn) || 10 * 60) * 1000);
 
       onSendCode?.(cleanEmail);
     } catch (err) {
