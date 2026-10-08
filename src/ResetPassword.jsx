@@ -11,7 +11,8 @@ import {
 
 import { useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
-import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY } from "./ForgotPassword";
+import CodeCountdown from "./CodeCountdown";
+import { RESET_CODE_KEY, RESET_COOLDOWN_KEY, RESET_EMAIL_KEY, RESET_EXPIRES_KEY } from "./ForgotPassword";
 import { API_BASE_URL } from "./config";
 
 
@@ -112,6 +113,7 @@ function ResetPassword({
   const code = (codeProp || readSession(RESET_CODE_KEY)).replace(/\D/g, "");
   const ready = Boolean(email && code.length === 6);
 
+  const [expiresAt] = useState(() => Number(readSession(RESET_EXPIRES_KEY)) || 0);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -186,6 +188,7 @@ function ResetPassword({
       writeSession(RESET_EMAIL_KEY, "");
       writeSession(RESET_CODE_KEY, "");
       writeSession(RESET_COOLDOWN_KEY, "");
+      writeSession(RESET_EXPIRES_KEY, "");
       onResetSuccess?.();
     } catch (err) {
       setError(
@@ -325,6 +328,9 @@ function ResetPassword({
                   <span className="font-semibold text-[#1f2937] break-all">{email}</span>
                 </p>
 
+                <div className="mb-6 flex justify-center">
+                  <CodeCountdown expiresAt={expiresAt} />
+                </div>
 
                 <form onSubmit={handleSubmit} noValidate>
 

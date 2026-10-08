@@ -8,6 +8,7 @@ export function useSecondsLeft(expiresAt) {
   const target = Number(expiresAt) || 0;
 
   useEffect(() => {
+    setNow(Date.now()); // new expiry (e.g. after Resend): don't wait a second to show the right time
     if (!target || target <= Date.now()) return undefined;
     const timer = window.setInterval(() => {
       const t = Date.now();

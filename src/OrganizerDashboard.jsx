@@ -261,6 +261,10 @@ function OrganizerStatusScreen({ account, checking, checkError, onRefresh, onRes
 
   return (
     <div className="eco-app-bg flex min-h-screen items-center justify-center p-4">
+      {/* Outside the card (it clips overflow) so the notification list can open. */}
+      <div className="fixed right-4 top-4 z-40">
+        <NotificationBell storageKey="organizerInfo" />
+      </div>
       <div className="eco-card w-full max-w-lg overflow-hidden">
         <div className={`relative px-6 pb-6 pt-8 text-center ${isRejected ? 'bg-gradient-to-br from-rose-50 to-white' : 'bg-gradient-to-br from-eco-50 to-white'}`}>
           <span className={`mx-auto flex h-16 w-16 items-center justify-center rounded-2xl ${
