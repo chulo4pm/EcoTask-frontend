@@ -32,6 +32,7 @@ import {
   Lock,
   AlertTriangle,
 } from 'lucide-react';
+import NotificationBell from "./NotificationBell";
 import { API_BASE_URL } from "./config";
 
 // Sidebar Navigation Items
@@ -81,56 +82,12 @@ export default function AdminDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Notification State
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-
-  useEffect(() => {
-    const loadAnnouncementNotifications = async () => {
-      try {
-        const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-        if (!adminInfo.token) return;
-        const response = await fetch(`${API_BASE_URL}/api/announcements`, {
-          headers: { Authorization: `Bearer ${adminInfo.token}` },
-        });
-        const data = await response.json();
-        if (!response.ok) return;
-
-        const announcementNotifications = data.map((announcement) => ({
-          id: `announcement-${announcement._id}`,
-          title: announcement.title,
-          text: announcement.description || announcement.message,
-          time: announcement.createdAt
-            ? new Date(announcement.createdAt).toLocaleString()
-            : 'Recently',
-          unread: true,
-        }));
-
-        setNotifications((currentNotifications) => {
-          const existingIds = new Set(currentNotifications.map((item) => item.id));
-          const newNotifications = announcementNotifications.filter((item) => !existingIds.has(item.id));
-          return [...newNotifications, ...currentNotifications];
-        });
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    loadAnnouncementNotifications();
-  }, []);
-
   // Profile Dropdown State
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   // Logged-in admin's name/email (updated live from Account Settings)
   const [adminProfile, setAdminProfile] = useState(() => JSON.parse(localStorage.getItem('adminInfo') || '{}'));
   const adminName = adminProfile.name || 'Administrator';
   const adminEmail = adminProfile.email || '';
-
-  const unreadCount = notifications.filter((n) => n.unread).length;
-
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, unread: false })));
-  };
 
   const handleLogout = () => {
     setShowProfileMenu(false);
@@ -268,77 +225,7 @@ export default function AdminDashboard({ onLogout }) {
 
           {/* HEADER CONTROLS */}
           <div className="flex items-center gap-2.5">
-            {/* Notification Bell */}
-            <div className="relative flex items-center">
-              <button
-                type="button"
-                aria-label="Notifications"
-                onClick={() => {
-                  setShowNotifications(!showNotifications);
-                  setShowProfileMenu(false);
-                }}
-                className="eco-icon-btn"
-              >
-                <Bell className="h-[17px] w-[17px]" />
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-eco-600 px-1 text-[10px] font-black text-white ring-2 ring-white">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Notification Popover */}
-              {showNotifications && (
-                <div className="eco-popover fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto p-4 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-none sm:w-[min(22rem,calc(100vw-2rem))] sm:overflow-visible text-slate-800">
-                  <div className="mb-3 flex items-center justify-between border-b border-eco-100 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="eco-icon-tile-soft h-8 w-8 rounded-lg">
-                        <Bell className="h-[15px] w-[15px]" />
-                      </span>
-                      <div>
-                        <p className="text-sm font-extrabold text-slate-900">Notifications</p>
-                        <p className="text-[11px] font-medium text-slate-500">{unreadCount} unread</p>
-                      </div>
-                    </div>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllAsRead}
-                        className="rounded-lg px-2 py-1 text-[11px] font-semibold text-eco-700 transition hover:bg-eco-50"
-                      >
-                        Mark all read
-                      </button>
-                    )}
-                  </div>
-                  <div className="eco-scroll max-h-72 space-y-2 overflow-y-auto pr-1">
-                    {notifications.length > 0 ? notifications.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`flex gap-3 rounded-xl border p-3 text-xs transition ${
-                          item.unread ? 'border-eco-200 bg-eco-50/60' : 'border-slate-100 bg-white'
-                        }`}
-                      >
-                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
-                          <Megaphone className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="font-bold text-slate-800">{item.title}</span>
-                            {item.unread && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-eco-500" />}
-                          </div>
-                          <p className="mt-0.5 leading-snug text-slate-600 [overflow-wrap:anywhere]">{item.text}</p>
-                          <p className="mt-1 text-[10px] font-medium text-slate-400">{item.time}</p>
-                        </div>
-                      </div>
-                    )) : (
-                      <div className="eco-empty py-8">
-                        <Bell className="h-5 w-5 text-eco-400" />
-                        No notifications yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <NotificationBell storageKey="adminInfo" />
 
             {/* Profile Dropdown */}
             <div className="relative flex items-center">
@@ -346,7 +233,6 @@ export default function AdminDashboard({ onLogout }) {
                 type="button"
                 onClick={() => {
                   setShowProfileMenu(!showProfileMenu);
-                  setShowNotifications(false);
                 }}
                 className="flex h-10 items-center gap-2 rounded-full border border-eco-200/70 bg-white pl-1.5 pr-3 shadow-sm transition hover:bg-eco-50 focus:outline-none"
               >

@@ -81,6 +81,7 @@ import {
   Building2,
   Lock,
 } from 'lucide-react'
+import { NOTIFICATION_STYLES, formatNotificationTime, notificationRequest } from './notificationApi'
 import { API_BASE_URL } from "./config";
 
 /* =========================================================
@@ -137,26 +138,35 @@ export default function App({ onLogout }) {
       try {
         if (!currentUser.token) return
         const headers = { Authorization: `Bearer ${currentUser.token}` }
-        const [announcementResponse, activityResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/announcements`, { headers }),
+        const [activityResponse, serverData] = await Promise.all([
           fetch(`${API_BASE_URL}/api/activities`, { headers }),
+          notificationRequest(currentUser.token).catch(() => ({ notifications: [] })),
         ])
-        const announcements = await announcementResponse.json()
         const activities = await activityResponse.json()
 
-        const announcementNotifications = announcementResponse.ok ? announcements.map((announcement) => ({
-          id: `announcement-${announcement._id}`,
-          type: 'ANNOUNCEMENT',
-          icon: <Megaphone size={14} className="text-gray-800" />,
-          title: announcement.title,
-          message: announcement.description || announcement.message,
-          isNew: true,
-          timestamp: announcement.createdAt ? new Date(announcement.createdAt).getTime() : 0,
-          time: announcement.createdAt
-            ? new Date(announcement.createdAt).toLocaleString()
-            : 'Recently',
-          actionText: 'View announcement',
-        })) : []
+        // Saved on the server: announcements, activity changes/cancellations, attendance.
+        const SERVER_TYPES = {
+          announcement: { type: 'ANNOUNCEMENT', actionText: 'View announcement' },
+          activity_updated: { type: 'SCHEDULE', actionText: 'View schedule' },
+          activity_cancelled: { type: 'ACTIVITY', actionText: 'View activities' },
+          attendance_marked: { type: 'RECORD', actionText: 'View record' },
+        }
+        const serverNotifications = (serverData.notifications || []).map((item) => {
+          const meta = SERVER_TYPES[item.type] || { type: 'SCHEDULE', actionText: 'View' }
+          const { Icon } = NOTIFICATION_STYLES[item.type] || NOTIFICATION_STYLES.announcement
+          return {
+            id: `server-${item._id}`,
+            serverId: item._id,
+            type: meta.type,
+            icon: <Icon size={14} className="text-eco-700" />,
+            title: item.title,
+            message: item.message,
+            isNew: !item.read,
+            timestamp: new Date(item.createdAt).getTime(),
+            time: formatNotificationTime(item.createdAt),
+            actionText: meta.actionText,
+          }
+        })
 
         const activityNotifications = activityResponse.ok ? activities.map((activity) => ({
           id: `activity-${activity._id}`,
@@ -195,7 +205,7 @@ export default function App({ onLogout }) {
 
         setNotifications((currentNotifications) => {
           const existingIds = new Set(currentNotifications.map((item) => item.id))
-          const newNotifications = [...announcementNotifications, ...activityNotifications, ...tomorrowActivityNotifications]
+          const newNotifications = [...serverNotifications, ...activityNotifications, ...tomorrowActivityNotifications]
             .filter((item) => !existingIds.has(item.id))
           return [...newNotifications, ...currentNotifications]
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
@@ -219,10 +229,16 @@ export default function App({ onLogout }) {
 
   const handleViewNotificationDetails = (notif) => {
     setNotificationOpen(false)
+    if (notif.serverId && notif.isNew) {
+      setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, isNew: false } : n)))
+      notificationRequest(currentUser.token, `/${notif.serverId}/read`, 'PATCH').catch(() => {})
+    }
     if (notif.type === 'ANNOUNCEMENT') {
       setActivePage('announcement')
     } else if (notif.type === 'ACTIVITY') {
       setActivePage('activities')
+    } else if (notif.type === 'RECORD') {
+      setActivePage('records')
     } else {
       setActivePage('schedule')
     }
@@ -230,10 +246,12 @@ export default function App({ onLogout }) {
 
   const handleMarkAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isNew: false })))
+    notificationRequest(currentUser.token, '/read-all', 'PATCH').catch(() => {})
   }
 
   const handleClearAll = () => {
     setNotifications([])
+    notificationRequest(currentUser.token, '', 'DELETE').catch(() => {})
   }
 
   const filteredNotifications = notifications

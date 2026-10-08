@@ -39,6 +39,7 @@ import {
   Building2,
   Ban,
 } from 'lucide-react';
+import NotificationBell from "./NotificationBell";
 import { API_BASE_URL } from "./config";
 
 // Sidebar Navigation Items
@@ -452,6 +453,8 @@ function OrganizerWorkspace({ account, onLogout }) {
             </div>
           </div>
 
+          <div className="flex items-center gap-2.5">
+          <NotificationBell storageKey="organizerInfo" />
           <div className="relative flex items-center">
             <button
               type="button"
@@ -478,6 +481,7 @@ function OrganizerWorkspace({ account, onLogout }) {
                 </button>
               </div>
             )}
+          </div>
           </div>
         </header>
 
