@@ -1,13 +1,16 @@
 import {
+  AlertCircle,
   ArrowLeft,
+  Clock,
   Eye,
   EyeOff,
+  Loader2,
   Lock,
   Mail,
   ShieldCheck,
 } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import volunteer from "./assets/voluteer.jpg";
 import { API_BASE_URL } from "./config";
 
@@ -65,6 +68,42 @@ function EcoTaskLogo() {
 
 
 /* =========================================================
+   RATE-LIMIT LOCK (same as the volunteer and organizer logins)
+   The server blocks too many failed logins (HTTP 429). We
+   remember when the block ends so the button stays disabled
+   after a refresh. The server is what enforces the limit.
+========================================================= */
+
+const LOCK_KEY = "ecotaskLoginLockedUntil";
+const DEFAULT_LOCK_SECONDS = 15 * 60;
+
+const readLock = () => {
+  try {
+    const value = Number(localStorage.getItem(LOCK_KEY));
+    return value > Date.now() ? value : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const saveLock = (until) => {
+  try {
+    if (until) localStorage.setItem(LOCK_KEY, String(until));
+    else localStorage.removeItem(LOCK_KEY);
+  } catch {
+    // storage unavailable (private mode) - the in-memory lock still works
+  }
+};
+
+const formatCountdown = (ms) => {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+};
+
+
+/* =========================================================
    ADMIN LOGIN
 ========================================================= */
 
@@ -73,10 +112,35 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
   const [showPassword, setShowPassword] =
     useState(false);
 
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [lockedUntil, setLockedUntil] = useState(readLock);
+  const [now, setNow] = useState(() => Date.now());
+
+  const isLocked = lockedUntil > now;
+  const remainingMs = lockedUntil - now;
+
+  // Tick every second while locked, then unlock automatically.
+  useEffect(() => {
+    if (!lockedUntil) return undefined;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= lockedUntil) {
+        setLockedUntil(0);
+        saveLock(0);
+        setError("");
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockedUntil]);
+
 
   const handleSubmit = async (e) => {
 
     e.preventDefault();
+
+    if (isLocked || submitting) return;
 
     const form = e.currentTarget;
 
@@ -86,8 +150,11 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
     }
 
     const formData = new FormData(form);
-    const email = formData.get('admin-email');
-    const password = formData.get('admin-password');
+    const email = String(formData.get('admin-email') || '').trim().toLowerCase();
+    const password = String(formData.get('admin-password') || '');
+
+    setError("");
+    setSubmitting(true);
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -105,7 +172,20 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
         throw new Error(`Server error: ${text.substring(0, 50)}...`);
       }
 
+      // Too many attempts: lock the form until the server's block ends.
+      if (res.status === 429) {
+        const seconds = Number(data.retryAfter) || DEFAULT_LOCK_SECONDS;
+        const until = Date.now() + seconds * 1000;
+        setNow(Date.now());
+        setLockedUntil(until);
+        saveLock(until);
+        setError(data.message || 'Too many login attempts. Please try again later.');
+        return;
+      }
+
       if (!res.ok) throw new Error(data.message || 'Login failed');
+
+      saveLock(0);
 
       if (data.role !== 'admin') {
         throw new Error('Access denied. This account is not an admin.');
@@ -114,7 +194,13 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
       localStorage.setItem('adminInfo', JSON.stringify(data));
       onAdminLogin();
     } catch (err) {
-      alert(err.message);
+      setError(
+        err.message === "Failed to fetch"
+          ? "Can't reach the server. Please check your connection and try again."
+          : err.message
+      );
+    } finally {
+      setSubmitting(false);
     }
 
   };
@@ -357,6 +443,32 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
 
             <form onSubmit={handleSubmit}>
 
+              {/* ERROR / LOCKED MESSAGE */}
+
+              {isLocked ? (
+                <div
+                  role="alert"
+                  className="mb-5 flex items-start gap-3 rounded-md border border-amber-200 !bg-amber-50 px-4 py-3 !text-sm !text-amber-900"
+                >
+                  <Clock size={18} className="mt-0.5 shrink-0 !text-amber-600" />
+                  <div>
+                    <p className="font-semibold">Too many login attempts</p>
+                    <p className="mt-0.5 !text-amber-800">
+                      For your security, sign-in is paused. Try again in{" "}
+                      <span className="font-mono font-bold">{formatCountdown(remainingMs)}</span>.
+                    </p>
+                  </div>
+                </div>
+              ) : error && (
+                <div
+                  role="alert"
+                  className="mb-5 flex items-start gap-2 rounded-md border border-red-200 !bg-red-50 px-4 py-3 !text-sm font-medium !text-red-700"
+                >
+                  <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                  {error}
+                </div>
+              )}
+
 
               {/* EMAIL */}
 
@@ -529,7 +641,13 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
 
               <button
                 type="submit"
+                disabled={isLocked || submitting}
+                aria-busy={submitting}
                 className="
+                  flex
+                  items-center
+                  justify-center
+                  gap-2
                   w-full
                   h-14
                   !bg-[#159447]
@@ -540,10 +658,17 @@ function AdminLogin({ onBack, onAdminLogin, onForgotPassword }) {
                   transition
                   shadow-md
                   hover:shadow-lg
+                  disabled:cursor-not-allowed
+                  disabled:!bg-[#8fc9a3]
+                  disabled:shadow-none
                 "
               >
 
-                Login as Admin
+                {isLocked
+                  ? `Try again in ${formatCountdown(remainingMs)}`
+                  : submitting
+                    ? (<><Loader2 size={18} className="animate-spin" /> Signing in...</>)
+                    : "Login as Admin"}
 
               </button>
 

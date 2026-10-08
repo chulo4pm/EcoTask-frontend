@@ -354,6 +354,9 @@ function OrganizerStatusScreen({ account, checking, checkError, onRefresh, onRes
   );
 }
 
+// Active list: today first, then the soonest. Past list: the most recent first.
+const sortLatestFirst = (activities) => sortActivitiesByStatus(activities).reverse();
+
 /* ==========================================
    APPROVED ORGANIZER WORKSPACE
    ========================================== */
@@ -1293,6 +1296,7 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
   const [editNotice, setEditNotice] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [listView, setListView] = useState('active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -1321,12 +1325,15 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
   const displayStatus = (activity) => getActivityStatus(activity.date);
   const getTime = (activity) => activity.tasks?.[0] || activity.time || 'Time not specified';
   const getMeeting = (activity) => activity.tasks?.[1] || activity.meeting || 'Meeting place not specified';
-  const filtered = sortActivitiesByStatus(activities.filter((act) => {
-    const status = displayStatus(act);
-    const query = searchTerm.toLowerCase();
-    return (activeFilter === 'All' || status === activeFilter) &&
-      `${act.title} ${act.location}`.toLowerCase().includes(query);
-  }));
+  // Two separate lists: activities still to come ("active") and finished ones ("past").
+  const matchesSearch = (act) => `${act.title} ${act.location}`.toLowerCase().includes(searchTerm.toLowerCase());
+  const activeActivities = activities.filter((act) => displayStatus(act) !== 'Completed');
+  const pastActivities = activities.filter((act) => displayStatus(act) === 'Completed');
+  const filtered = listView === 'past'
+    ? sortLatestFirst(pastActivities.filter(matchesSearch))
+    : sortActivitiesByStatus(activeActivities.filter((act) => (
+      (activeFilter === 'All' || activeFilter === 'Completed' || displayStatus(act) === activeFilter) && matchesSearch(act)
+    )));
 
   const statusCounts = activities.reduce((counts, activity) => {
     const status = displayStatus(activity);
@@ -1631,12 +1638,38 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
           />
         </div>
 
+        <div role="tablist" aria-label="Activity lists" className="inline-flex gap-1 rounded-2xl bg-eco-100/70 p-1">
+          {[
+            { key: 'active', label: 'Active', count: activeActivities.length },
+            { key: 'past', label: 'Past events', count: pastActivities.length },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={listView === tab.key}
+              onClick={() => setListView(tab.key)}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-extrabold transition ${
+                listView === tab.key
+                  ? tab.key === 'past' ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-eco-800 shadow-sm'
+                  : 'text-eco-700 hover:bg-white/60'
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-2 py-0.5 text-[11px] ${listView === tab.key && tab.key === 'past' ? 'bg-white/20' : 'bg-black/5'}`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {listView === 'active' ? (
         <div className="flex flex-wrap gap-2">
           {[
-            { label: 'All', count: activities.length, key: 'All', icon: Layers },
+            { label: 'All active', count: activeActivities.length, key: 'All', icon: Layers },
             { label: 'Upcoming', count: statusCounts.Upcoming, key: 'Upcoming', icon: CalendarClock },
-            { label: 'Ongoing', count: statusCounts.Ongoing, key: 'Ongoing', icon: Activity },
-            { label: 'Completed', count: statusCounts.Completed, key: 'Completed', icon: CheckCircle2 },
+            { label: 'Today', count: statusCounts.Ongoing, key: 'Ongoing', icon: Activity },
           ].map(({ label, count, key, icon: FilterIcon }) => (
             <button
               key={key}
@@ -1649,12 +1682,16 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
             </button>
           ))}
         </div>
-      </div>
+      ) : (
+        <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Finished activities, most recent first. Check volunteers and issue certificates here.
+        </p>
+      )}
 
       {filtered.length === 0 && (
         <div className="eco-empty py-12">
           <FolderOpen className="h-6 w-6 text-eco-400" />
-          No activities match your search or filter.
+          {listView === 'past' && !searchTerm ? 'No past events yet.' : 'No activities match your search or filter.'}
         </div>
       )}
 
@@ -1673,7 +1710,7 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
             >
               <div className="relative h-40 overflow-hidden bg-gradient-to-br from-eco-100 to-eco-50">
                 {act.coverImage ? (
-                  <img src={getActivityImageUrl(act.coverImage)} alt={act.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+                  <img src={getActivityImageUrl(act.coverImage)} alt={act.title} className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${status === 'Completed' ? 'grayscale' : ''}`} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-eco-300">
                     <Trees className="h-14 w-14" strokeWidth={1.2} />

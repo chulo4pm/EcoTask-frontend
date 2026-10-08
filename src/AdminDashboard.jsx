@@ -967,6 +967,7 @@ function ActivityOversightView() {
   const [organizers, setOrganizers] = useState([]);
   const [assignChoice, setAssignChoice] = useState({});
   const [search, setSearch] = useState('');
+  const [listView, setListView] = useState('active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -1017,7 +1018,11 @@ function ActivityOversightView() {
     }
   };
 
-  const filtered = activities.filter((a) => (
+  // Two separate lists. Active: today first, then the soonest. Past: the most recent first.
+  const isPast = (a) => getActivityStatus(a.date) === 'Completed';
+  const activeActivities = sortActivitiesByStatus(activities.filter((a) => !isPast(a)));
+  const pastActivities = sortActivitiesByStatus(activities.filter(isPast)).reverse();
+  const filtered = (listView === 'past' ? pastActivities : activeActivities).filter((a) => (
     `${a.title} ${a.location} ${a.organizer?.organizationName || ''}`.toLowerCase().includes(search.toLowerCase())
   ));
 
@@ -1034,11 +1039,30 @@ function ActivityOversightView() {
 
       <div className="eco-card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-eco-100 p-4">
-          <h3 className="eco-section-title">
-            <span className="eco-icon-tile h-8 w-8 rounded-lg"><FolderOpen className="h-[15px] w-[15px]" /></span>
-            All Activities
-            <span className="eco-badge eco-badge-green">{filtered.length}</span>
-          </h3>
+          <div role="tablist" aria-label="Activity lists" className="inline-flex gap-1 rounded-2xl bg-eco-100/70 p-1">
+            {[
+              { key: 'active', label: 'Active', count: activeActivities.length },
+              { key: 'past', label: 'Past events', count: pastActivities.length },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={listView === tab.key}
+                onClick={() => setListView(tab.key)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-extrabold transition ${
+                  listView === tab.key
+                    ? tab.key === 'past' ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-eco-800 shadow-sm'
+                    : 'text-eco-700 hover:bg-white/60'
+                }`}
+              >
+                {tab.label}
+                <span className={`rounded-full px-2 py-0.5 text-[11px] ${listView === tab.key && tab.key === 'past' ? 'bg-white/20' : 'bg-black/5'}`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
           <div className="flex w-full items-center gap-2 rounded-xl border border-eco-100 bg-eco-50/50 px-3.5 py-2.5 sm:w-80">
             <Search className="h-4 w-4 text-eco-600" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, place, organizer..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
@@ -1100,7 +1124,7 @@ function ActivityOversightView() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="py-10 text-center text-slate-400">No activities found.</td></tr>
+                <tr><td colSpan={6} className="py-10 text-center text-slate-400">{search ? 'No activities found.' : listView === 'past' ? 'No past events yet.' : 'No active activities.'}</td></tr>
               )}
             </tbody>
           </table>

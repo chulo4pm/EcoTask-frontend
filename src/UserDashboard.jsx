@@ -30,6 +30,21 @@ const isTomorrow = (dateValue) => {
     activityDate.getDate() === tomorrow.getDate()
 }
 
+const activityTimeInMinutes = (activity) => {
+  const time = activity.time || activity.tasks?.[0] || ''
+  const match = String(time).match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i)
+  if (!match) return 0
+  let hour = Number(match[1]) % 12
+  if (match[3].toUpperCase() === 'PM') hour += 12
+  return hour * 60 + Number(match[2] || 0)
+}
+const activityMoment = (activity) => (
+  new Date(activity.rawDate || activity.date).getTime() + activityTimeInMinutes(activity) * 60000
+)
+// Active list: today first, then the soonest. Past list: the most recent first.
+const sortSoonestFirst = (list) => [...list].sort((a, b) => activityMoment(a) - activityMoment(b))
+const sortLatestFirst = (list) => [...list].sort((a, b) => activityMoment(b) - activityMoment(a))
+
 const sortActivitiesByStatus = (activities) => {
   const getTimeInMinutes = (activity) => {
     const time = activity.time || activity.tasks?.[0] || ''
@@ -542,11 +557,13 @@ export default function App({ onLogout }) {
 
                   <button
                     onClick={() => {
-                      // Remove the saved login so the next person can't reuse it.
-                      localStorage.removeItem('userInfo')
                       setProfileOpen(false)
+                      // The app's logout removes the saved login (and says goodbye by name).
                       if (onLogout) onLogout()
-                      else window.location.href = '/'
+                      else {
+                        localStorage.removeItem('userInfo')
+                        window.location.href = '/'
+                      }
                     }}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
                   >
@@ -878,7 +895,7 @@ function ScheduleRow({ date, title, time, location }) {
    ACTIVITIES
 ========================================================= */
 
-function Activities() {
+function Activities({ goTo }) {
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [registrationActivity, setRegistrationActivity] = useState(null)
   const [cancelActivity, setCancelActivity] = useState(null)
@@ -887,6 +904,8 @@ function Activities() {
   const [pageNotice, setPageNotice] = useState('')
   const [registeredActivities, setRegisteredActivities] = useState([])
   const [activityFilter, setActivityFilter] = useState('All')
+  // Two separate lists: what you can still join ("active") and finished ones ("past").
+  const [view, setView] = useState('active')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -1097,9 +1116,11 @@ function Activities() {
     counts[status] += 1
     return counts
   }, { Upcoming: 0, Ongoing: 0, Completed: 0 })
-  const visibleActivities = activities.filter((activity) => (
-    activityFilter === 'All' || activity.status === activityFilter
-  ))
+  const activeActivities = sortSoonestFirst(activities.filter((activity) => activity.status !== 'Completed'))
+  const pastActivities = sortLatestFirst(activities.filter((activity) => activity.status === 'Completed'))
+  const visibleActivities = view === 'past'
+    ? pastActivities
+    : activeActivities.filter((activity) => activityFilter === 'All' || activity.status === activityFilter)
 
   if (loading) {
     return (
@@ -1118,38 +1139,75 @@ function Activities() {
   const isFull = (activity) => (
     activity.participantCount >= activity.volunteerLimit && !registeredActivities.includes(activity.id)
   )
+  // Registration closes when the activity day starts.
+  const isClosedToday = (activity) => (
+    activity.status === 'Ongoing' && !registeredActivities.includes(activity.id)
+  )
 
   return (
     <div className="relative mx-auto max-w-[1450px] p-5 lg:p-8">
       <PageHeader title="Activities" subtitle="Find an activity and register to volunteer.">
-        {[
-          { key: 'All', label: 'All', count: activities.length },
-          { key: 'Upcoming', label: 'Upcoming', count: activityCounts.Upcoming },
-          { key: 'Ongoing', label: 'Ongoing', count: activityCounts.Ongoing },
-          { key: 'Completed', label: 'Past Events', count: activityCounts.Completed },
-        ].map((filter) => (
-          <button
-            key={filter.key}
-            type="button"
-            onClick={() => setActivityFilter(filter.key)}
-            className={`eco-chip ${activityFilter === filter.key ? 'eco-chip-active' : ''}`}
-          >
-            {filter.label}
-            <span className="eco-chip-count">{filter.count}</span>
-          </button>
-        ))}
+        <div role="tablist" aria-label="Activity lists" className="inline-flex gap-1 rounded-2xl bg-eco-100/70 p-1">
+          {[
+            { key: 'active', label: 'Active', count: activeActivities.length },
+            { key: 'past', label: 'Past events', count: pastActivities.length },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={view === tab.key}
+              onClick={() => setView(tab.key)}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-extrabold transition ${
+                view === tab.key
+                  ? tab.key === 'past' ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-eco-800 shadow-sm'
+                  : 'text-eco-700 hover:bg-white/60'
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-2 py-0.5 text-[11px] ${view === tab.key && tab.key === 'past' ? 'bg-white/20' : 'bg-black/5'}`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
       </PageHeader>
+
+      {view === 'active' ? (
+        <div className="-mt-3 mb-5 flex flex-wrap gap-2">
+          {[
+            { key: 'All', label: 'All active', count: activeActivities.length },
+            { key: 'Upcoming', label: 'Upcoming', count: activityCounts.Upcoming },
+            { key: 'Ongoing', label: 'Today', count: activityCounts.Ongoing },
+          ].map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={() => setActivityFilter(filter.key)}
+              className={`eco-chip ${activityFilter === filter.key ? 'eco-chip-active' : ''}`}
+            >
+              {filter.label}
+              <span className="eco-chip-count">{filter.count}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="-mt-3 mb-5 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+          <Clock size={13} /> Finished activities. You can't join these anymore. Most recent first.
+        </p>
+      )}
 
       {visibleActivities.length === 0 && (
         <div className="eco-empty py-12">
           <Leaf size={26} className="text-eco-400" />
-          No activities in this category yet.
+          {view === 'past' ? 'No past events yet.' : 'No activities in this category yet.'}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
         {visibleActivities.map((activity, index) => {
           const registered = registeredActivities.includes(activity.id)
+          const past = activity.status === 'Completed'
           const limit = Number(activity.volunteerLimit) || 0
           const count = Number(activity.participantCount ?? String(activity.volunteers).split('/')[0]) || 0
           const fillPercent = limit > 0 ? Math.min(100, Math.round((count / limit) * 100)) : 0
@@ -1163,15 +1221,15 @@ function Activities() {
                 <img
                   src={activity.image}
                   alt={activity.title}
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                  className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${past ? 'grayscale' : ''}`}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-eco-950/60 via-transparent to-transparent" />
                 <div className="absolute left-3 top-3 flex gap-1.5">
                   <StatusBadge status={activity.status} />
                 </div>
                 {registered && (
-                  <span className="eco-badge eco-badge-solid absolute right-3 top-3 shadow-md">
-                    <CheckCircle size={12} /> Registered
+                  <span className={`eco-badge absolute right-3 top-3 shadow-md ${past ? 'border border-slate-500 bg-slate-700 text-white' : 'eco-badge-solid'}`}>
+                    <CheckCircle size={12} /> {past ? 'You joined' : 'Registered'}
                   </span>
                 )}
                 <p className="absolute bottom-3 left-4 flex items-center gap-1.5 text-xs font-semibold text-white">
@@ -1209,19 +1267,26 @@ function Activities() {
                     <span className="flex items-center gap-1 text-gray-600">
                       <Users size={12} className="text-eco-600" /> {count}/{limit || '—'} volunteers
                     </span>
-                    {isFull(activity) && <span className="eco-badge eco-badge-red">Full</span>}
+                    {isClosedToday(activity) ? (
+                      <span className="eco-badge border border-amber-200 bg-amber-50 text-amber-700">Registration closed</span>
+                    ) : !past && isFull(activity) && <span className="eco-badge eco-badge-red">Full</span>}
                   </div>
                   <div className="eco-progress"><span style={{ width: `${fillPercent}%` }} /></div>
                 </div>
 
-                <div className="mt-4 flex justify-end border-t border-eco-100 pt-3">
+                <div className="mt-4 flex justify-end gap-2 border-t border-eco-100 pt-3">
                   <button
                     type="button"
                     onClick={() => setSelectedActivity(activity)}
-                    className="eco-btn eco-btn-primary eco-btn-sm"
+                    className={`eco-btn eco-btn-sm ${past ? 'eco-btn-secondary' : 'eco-btn-primary'}`}
                   >
                     View details <ChevronRight size={14} />
                   </button>
+                  {past && registered && goTo && (
+                    <button type="button" onClick={() => goTo('records')} className="eco-btn eco-btn-primary eco-btn-sm">
+                      See my record
+                    </button>
+                  )}
                 </div>
               </div>
             </article>
@@ -1318,9 +1383,9 @@ function Activities() {
                   </button>
                   <button
                     type="button"
-                    disabled={isFull(selectedActivity)}
+                    disabled={isFull(selectedActivity) || isClosedToday(selectedActivity)}
                     onClick={() => {
-                      if (isFull(selectedActivity)) return
+                      if (isFull(selectedActivity) || isClosedToday(selectedActivity)) return
                       if (registeredActivities.includes(selectedActivity.id)) {
                         setCancelActivity(selectedActivity)
                       } else {
@@ -1329,14 +1394,16 @@ function Activities() {
                       setSelectedActivity(null)
                     }}
                     className={`eco-btn ${
-                      isFull(selectedActivity)
+                      isFull(selectedActivity) || isClosedToday(selectedActivity)
                         ? 'eco-btn-muted'
                         : registeredActivities.includes(selectedActivity.id)
                         ? 'eco-btn-danger-soft'
                         : 'eco-btn-primary'
                     }`}
                   >
-                    {isFull(selectedActivity)
+                    {isClosedToday(selectedActivity)
+                      ? 'REGISTRATION CLOSED'
+                      : isFull(selectedActivity)
                       ? 'EVENT FULL'
                       : registeredActivities.includes(selectedActivity.id) ? 'CANCEL REGISTRATION' : 'REGISTER'}
                   </button>

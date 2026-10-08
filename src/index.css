@@ -858,3 +858,19 @@ body {
   .eco-reveal { opacity: 1; transform: none; }
   .landing-leaf, .landing-hero-img, .landing-up { animation: none; }
 }
+
+
+/* Logout card: slides down, then the green bar shrinks while it counts down. */
+@keyframes ecotask-toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ecotask-toast-timer {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+.ecotask-toast-enter { animation: ecotask-toast-in 0.35s ease-out both; }
+.ecotask-toast-timer { transform-origin: left; animation-name: ecotask-toast-timer; animation-timing-function: linear; animation-fill-mode: forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .ecotask-toast-enter { animation: none; }
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Check,
   Leaf,
@@ -178,14 +178,13 @@ const FEATURES = [
 ];
 
 const FAQS = [
-  { q: "Is EcoTask free?", a: "Yes. Volunteer and organizer accounts are both free." },
   { q: "How do I become an organizer?", a: "Apply as an organizer and upload a verification document. The EcoTask admin reviews it, and once approved you can post activities." },
   { q: "How do I get my certificate?", a: "After the activity, the organizer marks attendance and issues certificates. You can download yours from your dashboard." },
   { q: "Can I leave an activity after joining?", a: "Yes. You can leave an activity from your dashboard before it happens." },
 ];
 
 const NAV_LINKS = [
-  { id: "how", label: "How it works" },
+  { id: "how", label: "Home" },
   { id: "join", label: "Join" },
   { id: "features", label: "Features" },
   { id: "contacts", label: "Contact" },
@@ -217,7 +216,6 @@ function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerR
 
   const primaryBtn = "landing-btn inline-flex items-center justify-center gap-2 rounded-xl bg-green-500 font-bold text-black shadow-[0_8px_20px_-8px_rgba(34,197,94,0.7)] transition hover:-translate-y-px hover:bg-green-400 active:scale-95";
   const ghostBtn = "landing-btn inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 font-bold text-white transition hover:bg-white/10 active:scale-95";
-  const outlineBtn = "landing-btn inline-flex items-center justify-center gap-2 rounded-xl border border-green-100 bg-white font-bold text-[#12351f] transition hover:border-green-500 hover:text-green-700 active:scale-95";
   const card = "eco-reveal landing-card rounded-2xl border border-green-100 bg-white";
 
   return (
@@ -411,7 +409,7 @@ function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerR
               <h2 className="mt-4 text-3xl font-black leading-tight tracking-tight md:text-[42px]">
                 Two ways to <span className="text-green-600">take part.</span>
               </h2>
-              <p className="mt-3 text-gray-600">Pick the one that fits you. Each has its own sign-up and log-in.</p>
+              <p className="mt-3 text-gray-600">Pick the one that fits you.</p>
             </div>
 
             <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -429,9 +427,6 @@ function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerR
                   <button onClick={onGetStarted} className={`${primaryBtn} px-5 py-3 text-sm`}>
                     Sign up free <ArrowRight size={16} />
                   </button>
-                  <button onClick={onLogin} className={`${outlineBtn} px-5 py-3 text-sm`}>
-                    Log in
-                  </button>
                 </div>
               </div>
 
@@ -448,9 +443,6 @@ function LandingPage({ onGetStarted, onLogin, onAdmin, onOrganizer, onOrganizerR
                 <div className="mt-auto flex flex-wrap gap-2.5">
                   <button onClick={onOrganizerRegister} className={`${primaryBtn} px-5 py-3 text-sm`}>
                     Apply as organizer <ArrowRight size={16} />
-                  </button>
-                  <button onClick={onOrganizer} className={`${ghostBtn} px-5 py-3 text-sm`}>
-                    Organizer log in
                   </button>
                 </div>
                 <p className="mt-4 flex items-center gap-1.5 text-xs text-white/60">
@@ -740,8 +732,72 @@ function PageCurtain({ phase }) {
 }
 
 
+/* =========================================================
+   LOGOUT CARD
+   Small card on the landing page after logging out.
+   Closes itself after LOGOUT_CARD_MS (the green bar shows
+   the time left) or with the X.
+========================================================= */
+
+const LOGOUT_CARD_MS = 6000;
+
+function LogoutCard({ name, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, LOGOUT_CARD_MS);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="ecotask-toast-enter fixed left-1/2 top-20 z-[60] w-[min(470px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-green-200 bg-white text-gray-900 shadow-[0_18px_40px_rgba(4,33,15,0.25)]"
+    >
+      <div className="flex items-start gap-3.5 p-4 pr-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600">
+          <CheckCircle2 size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-extrabold">You've logged out</p>
+          <p className="mt-0.5 text-[13px] leading-5 text-gray-600 [overflow-wrap:anywhere]">
+            {name ? `See you next time, ${name}! ` : "See you next time! "}
+            Your account is safely signed out on this device.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <div className="h-1 bg-green-50">
+        <div className="ecotask-toast-timer h-full bg-green-500" style={{ animationDuration: `${LOGOUT_CARD_MS}ms` }} />
+      </div>
+    </div>
+  );
+}
+
+// Name for the goodbye message, read before the login info is deleted.
+const readLogoutName = (storageKey) => {
+  try {
+    const info = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    if (storageKey === "userInfo") return String(info.name || "").trim().split(/\s+/)[0] || "";
+    if (storageKey === "organizerInfo") return info.organizationName || info.name || "";
+    return info.name || "";
+  } catch {
+    return "";
+  }
+};
+
+
 function App() {
   const [page, setPage] = useState(getInitialPage);
+  // Shown on the landing page right after logging out: { name } or null.
+  const [logoutNotice, setLogoutNotice] = useState(null);
+  const closeLogoutNotice = useCallback(() => setLogoutNotice(null), []);
 
   // Save the page every time it changes, so a refresh reopens it.
   useEffect(() => {
@@ -785,21 +841,21 @@ function App() {
     try { sessionStorage.setItem(RESET_FROM_KEY, resetFrom); } catch { /* private mode */ }
   }, [resetFrom]);
 
-  // Log out: delete the saved token so it can't be reused, then go home.
-  const logoutVolunteer = () => {
-    localStorage.removeItem("userInfo");
+  // Log out: delete the saved token so it can't be reused, go home,
+  // and show the "You've logged out" card once the page has switched.
+  const logout = (storageKey) => {
+    const name = readLogoutName(storageKey);
+    localStorage.removeItem(storageKey);
+    setLogoutNotice(null);
     goTo("landing");
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const delay = reduceMotion ? 0 : CURTAIN_IN_MS + CURTAIN_OUT_MS;
+    timers.current.push(setTimeout(() => setLogoutNotice({ name }), delay));
   };
 
-  const logoutAdmin = () => {
-    localStorage.removeItem("adminInfo");
-    goTo("landing");
-  };
-
-  const logoutOrganizer = () => {
-    localStorage.removeItem("organizerInfo");
-    goTo("landing");
-  };
+  const logoutVolunteer = () => logout("userInfo");
+  const logoutAdmin = () => logout("adminInfo");
+  const logoutOrganizer = () => logout("organizerInfo");
 
   const content = (() => {
   /* ORGANIZER PAGES */
@@ -1024,6 +1080,9 @@ function App() {
       <div key={page} className="ecotask-route-fade">
         {content}
       </div>
+      {page === "landing" && logoutNotice && (
+        <LogoutCard name={logoutNotice.name} onClose={closeLogoutNotice} />
+      )}
       {curtain && <PageCurtain phase={curtain} />}
     </>
   );
