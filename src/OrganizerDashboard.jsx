@@ -362,6 +362,8 @@ function OrganizerWorkspace({ account, onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState('All');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  // Set by a "New volunteer joined" notification: Manage Activities opens that activity's volunteer list.
+  const [openVolunteersFor, setOpenVolunteersFor] = useState(null);
 
   const displayName = account.organizationName || account.name || 'Organizer';
   const pageMeta = {
@@ -460,7 +462,15 @@ function OrganizerWorkspace({ account, onLogout }) {
           <div className="flex items-center gap-2.5">
           <NotificationBell
             storageKey="organizerInfo"
-            onOpen={(item) => setActiveTab(item.type === 'volunteer_joined' ? 'Manage Activities' : 'Dashboard')}
+            onOpen={(item) => {
+              if (item.type === 'volunteer_joined') {
+                setActivityFilter('All');
+                setOpenVolunteersFor(item.activity || null);
+                setActiveTab('Manage Activities');
+              } else {
+                setActiveTab('Dashboard');
+              }
+            }}
           />
           <div className="relative flex items-center">
             <button
@@ -501,7 +511,12 @@ function OrganizerWorkspace({ account, onLogout }) {
             {activeTab === 'Dashboard' && <OrganizerHomeView goTo={setActiveTab} />}
             {activeTab === 'Create Activity' && <CreateActivityView />}
             {activeTab === 'Manage Activities' && (
-              <ManageActivitiesView activeFilter={activityFilter} setFilter={setActivityFilter} />
+              <ManageActivitiesView
+                activeFilter={activityFilter}
+                setFilter={setActivityFilter}
+                openVolunteersFor={openVolunteersFor}
+                onVolunteersOpened={() => setOpenVolunteersFor(null)}
+              />
             )}
             {activeTab === 'Participation Record' && <ParticipationRecordView />}
             {activeTab === 'Reports' && <OrganizerReportsView />}
@@ -1264,7 +1279,7 @@ function CreateActivityView() {
 /* ==========================================
    MANAGE ACTIVITIES VIEW
    ========================================== */
-function ManageActivitiesView({ activeFilter, setFilter }) {
+function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVolunteersOpened }) {
   const [selectedActivityForVolunteers, setSelectedActivityForVolunteers] = useState(null);
   const [selectedActivityForCertificates, setSelectedActivityForCertificates] = useState(null);
   const [editingActivity, setEditingActivity] = useState(null);
@@ -1329,6 +1344,15 @@ function ManageActivitiesView({ activeFilter, setFilter }) {
       alert(requestError.message);
     }
   };
+
+  // Opened from a "New volunteer joined" notification: show that activity's volunteers.
+  useEffect(() => {
+    if (!openVolunteersFor || loading) return;
+    const target = activities.find((act) => String(act._id) === String(openVolunteersFor));
+    if (target) loadParticipants(target);
+    onVolunteersOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openVolunteersFor, loading, activities]);
 
   const issueCertificates = async (activity) => {
     if (!window.confirm(`Issue certificates to present volunteers for ${activity.title}?`)) return;

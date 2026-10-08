@@ -1,5 +1,5 @@
 import {
-  Ban, CalendarClock, CheckCircle2, ClipboardCheck, Megaphone, UserPlus, XCircle,
+  Ban, CalendarClock, CheckCircle2, ClipboardCheck, Leaf, Megaphone, UserPlus, XCircle,
 } from 'lucide-react';
 import { API_BASE_URL } from './config';
 
@@ -10,6 +10,7 @@ export const POLL_MS = 30000;
 
 export const NOTIFICATION_STYLES = {
   announcement:          { Icon: Megaphone,     tone: 'border-amber-200 bg-amber-50 text-amber-700' },
+  activity_published:    { Icon: Leaf,          tone: 'border-eco-200 bg-eco-50 text-eco-700' },
   activity_updated:      { Icon: CalendarClock, tone: 'border-sky-200 bg-sky-50 text-sky-700' },
   activity_cancelled:    { Icon: Ban,           tone: 'border-rose-200 bg-rose-50 text-rose-700' },
   attendance_marked:     { Icon: ClipboardCheck, tone: 'border-eco-200 bg-eco-50 text-eco-700' },

@@ -46,7 +46,7 @@ const sortActivitiesByStatus = (activities) => {
     (getTimeInMinutes(a) - getTimeInMinutes(b))
   ))
 }
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
@@ -109,6 +109,26 @@ function EcoTaskLogo({ light = false }) {
    APP
 ========================================================= */
 
+// "Activity tomorrow" reminders are made in the browser, so their read/cleared
+// state is remembered here (per volunteer). Everything else lives on the server.
+const reminderKey = (userId) => `ecotaskReminderState:${userId || 'guest'}`
+const loadReminderState = (userId) => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(reminderKey(userId)) || '{}')
+    return { read: saved.read || [], cleared: saved.cleared || [] }
+  } catch {
+    return { read: [], cleared: [] }
+  }
+}
+const rememberReminders = (userId, field, ids) => {
+  if (!ids.length) return
+  try {
+    const state = loadReminderState(userId)
+    state[field] = [...new Set([...state[field], ...ids])].slice(-300)
+    localStorage.setItem(reminderKey(userId), JSON.stringify(state))
+  } catch { /* storage blocked: the reminder just shows as new again */ }
+}
+
 export default function App({ onLogout }) {
   const [activePage, setActivePage] = useState('dashboard')
   const [profileOpen, setProfileOpen] = useState(false)
@@ -132,6 +152,9 @@ export default function App({ onLogout }) {
 
   const [notifications, setNotifications] = useState([])
   const [notifTab, setNotifTab] = useState('ALL')
+  // Changes made here that the next poll might not reflect yet (request still in flight).
+  const readLocally = useRef(new Set())
+  const clearedAt = useRef(0)
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -140,76 +163,76 @@ export default function App({ onLogout }) {
         const headers = { Authorization: `Bearer ${currentUser.token}` }
         const [activityResponse, serverData] = await Promise.all([
           fetch(`${API_BASE_URL}/api/activities`, { headers }),
-          notificationRequest(currentUser.token).catch(() => ({ notifications: [] })),
+          notificationRequest(currentUser.token).catch(() => null),
         ])
-        const activities = await activityResponse.json()
+        const activities = activityResponse.ok ? await activityResponse.json() : []
 
-        // Saved on the server: announcements, activity changes/cancellations, attendance.
+        // Saved on the server: new activities, announcements, activity changes/cancellations, attendance.
         const SERVER_TYPES = {
+          activity_published: { type: 'ACTIVITY', actionText: 'View activity' },
           announcement: { type: 'ANNOUNCEMENT', actionText: 'View announcement' },
           activity_updated: { type: 'SCHEDULE', actionText: 'View schedule' },
           activity_cancelled: { type: 'SCHEDULE', actionText: 'View schedule' },
           attendance_marked: { type: 'RECORD', actionText: 'View record' },
         }
-        const serverNotifications = (serverData.notifications || []).map((item) => {
-          const meta = SERVER_TYPES[item.type] || { type: 'SCHEDULE', actionText: 'View' }
-          const { Icon } = NOTIFICATION_STYLES[item.type] || NOTIFICATION_STYLES.announcement
-          return {
-            id: `server-${item._id}`,
-            serverId: item._id,
-            type: meta.type,
-            icon: <Icon size={14} className="text-eco-700" />,
-            title: item.title,
-            message: item.message,
-            isNew: !item.read,
-            timestamp: new Date(item.createdAt).getTime(),
-            time: formatNotificationTime(item.createdAt),
-            actionText: meta.actionText,
-          }
-        })
+        const serverNotifications = (serverData?.notifications || [])
+          .filter((item) => new Date(item.createdAt).getTime() > clearedAt.current)
+          .map((item) => {
+            const meta = SERVER_TYPES[item.type] || { type: 'SCHEDULE', actionText: 'View' }
+            const { Icon } = NOTIFICATION_STYLES[item.type] || NOTIFICATION_STYLES.announcement
+            return {
+              id: `server-${item._id}`,
+              serverId: item._id,
+              type: meta.type,
+              icon: <Icon size={14} className="text-eco-700" />,
+              title: item.title,
+              message: item.message,
+              isNew: !item.read && !readLocally.current.has(item._id),
+              timestamp: new Date(item.createdAt).getTime(),
+              time: formatNotificationTime(item.createdAt),
+              actionText: meta.actionText,
+            }
+          })
 
-        const activityNotifications = activityResponse.ok ? activities.map((activity) => ({
-          id: `activity-${activity._id}`,
-          type: 'ACTIVITY',
-          icon: <Leaf size={14} className="text-eco-700" />,
-          title: 'New activity published',
-          message: activity.title,
-          isNew: true,
-          timestamp: activity.createdAt ? new Date(activity.createdAt).getTime() : 0,
-          time: activity.createdAt
-            ? new Date(activity.createdAt).toLocaleString()
-            : 'Recently',
-          actionText: 'View activity',
-        })) : []
-
-        const tomorrowActivityNotifications = activityResponse.ok ? activities
+        const reminderState = loadReminderState(currentUser._id)
+        const tomorrowActivityNotifications = (Array.isArray(activities) ? activities : [])
           .filter((activity) => isTomorrow(activity.date))
           .map((activity) => {
             const joined = (activity.participants || []).some((participant) => (
               (participant._id || participant).toString() === currentUser._id
             ))
+            const id = `activity-tomorrow-${activity._id}-${currentUser._id}`
             return {
-              id: `activity-tomorrow-${activity._id}-${currentUser._id}`,
+              id,
+              reminder: true,
               type: 'ACTIVITY',
               icon: <Calendar size={14} className="text-eco-700" />,
               title: joined ? 'Activity reminder' : 'Activity tomorrow',
               message: joined
                 ? `${activity.title} is tomorrow. We look forward to seeing you!`
                 : `${activity.title} is tomorrow. Would you like to join?`,
-              isNew: true,
+              isNew: !reminderState.read.includes(id),
               timestamp: new Date(activity.date).getTime(),
               time: 'Tomorrow',
               actionText: joined ? 'View activity' : 'Join activity',
             }
-          }) : []
+          })
+          .filter((item) => !reminderState.cleared.includes(item.id))
 
-        setNotifications((currentNotifications) => {
-          const existingIds = new Set(currentNotifications.map((item) => item.id))
-          const newNotifications = [...serverNotifications, ...activityNotifications, ...tomorrowActivityNotifications]
-            .filter((item) => !existingIds.has(item.id))
-          return [...newNotifications, ...currentNotifications]
-            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-        })
+        // Server unreachable: keep what is already shown instead of wiping the list.
+        if (!serverData) {
+          setNotifications((current) => {
+            const reminders = new Map(tomorrowActivityNotifications.map((n) => [n.id, n]))
+            return [...current.filter((n) => !n.reminder), ...reminders.values()]
+              .sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0))
+          })
+          return
+        }
+
+        setNotifications(
+          [...serverNotifications, ...tomorrowActivityNotifications]
+            .sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0))
+        )
       } catch (error) {
         console.error(error)
       }
@@ -227,11 +250,17 @@ export default function App({ onLogout }) {
     setMobileNavOpen(false)
   }
 
+  // Clicking a notification marks it read (count goes down) and opens the related page.
   const handleViewNotificationDetails = (notif) => {
     setNotificationOpen(false)
-    if (notif.serverId && notif.isNew) {
+    if (notif.isNew) {
       setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, isNew: false } : n)))
-      notificationRequest(currentUser.token, `/${notif.serverId}/read`, 'PATCH').catch(() => {})
+      if (notif.serverId) {
+        readLocally.current.add(notif.serverId)
+        notificationRequest(currentUser.token, `/${notif.serverId}/read`, 'PATCH').catch(() => {})
+      } else if (notif.reminder) {
+        rememberReminders(currentUser._id, 'read', [notif.id])
+      }
     }
     if (notif.type === 'ANNOUNCEMENT') {
       setActivePage('announcement')
@@ -245,11 +274,15 @@ export default function App({ onLogout }) {
   }
 
   const handleMarkAllRead = () => {
+    notifications.forEach((n) => { if (n.serverId) readLocally.current.add(n.serverId) })
+    rememberReminders(currentUser._id, 'read', notifications.filter((n) => n.reminder).map((n) => n.id))
     setNotifications((prev) => prev.map((n) => ({ ...n, isNew: false })))
     notificationRequest(currentUser.token, '/read-all', 'PATCH').catch(() => {})
   }
 
   const handleClearAll = () => {
+    clearedAt.current = Date.now()
+    rememberReminders(currentUser._id, 'cleared', notifications.filter((n) => n.reminder).map((n) => n.id))
     setNotifications([])
     notificationRequest(currentUser.token, '', 'DELETE').catch(() => {})
   }
