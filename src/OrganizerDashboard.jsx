@@ -1281,6 +1281,9 @@ function CreateActivityView() {
    ========================================== */
 function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVolunteersOpened }) {
   const [selectedActivityForVolunteers, setSelectedActivityForVolunteers] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [selectedActivityForCertificates, setSelectedActivityForCertificates] = useState(null);
   const [editingActivity, setEditingActivity] = useState(null);
   const [editOriginal, setEditOriginal] = useState(null); // snapshot to detect changes + edit rules
@@ -1384,21 +1387,49 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
     }
   };
 
-  const handleDelete = async (activity) => {
-    if (!window.confirm(`Delete ${activity.title}?`)) return;
+  // Delete asks first in a confirmation card (deleteTarget = the activity waiting for an answer).
+  const handleDelete = (activity) => {
+    setDeleteError('');
+    setDeleteTarget(activity);
+  };
+
+  const closeDeleteCard = () => {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError('');
     try {
       const adminInfo = JSON.parse(localStorage.getItem('organizerInfo') || '{}');
-      const response = await fetch(`${API_BASE_URL}/api/activities/${activity._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/activities/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminInfo.token}` },
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || 'Unable to delete activity');
-      setActivities((current) => current.filter((item) => item._id !== activity._id));
+      setActivities((current) => current.filter((item) => item._id !== deleteTarget._id));
+      setDeleteTarget(null);
     } catch (requestError) {
-      alert(requestError.message);
+      setDeleteError(requestError.message === 'Failed to fetch'
+        ? "Can't reach the server. Please try again."
+        : requestError.message);
+    } finally {
+      setDeleting(false);
     }
   };
+
+  // Escape closes the card.
+  useEffect(() => {
+    if (!deleteTarget) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') closeDeleteCard(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteTarget, deleting]);
 
   // Placeholders like "Time not specified" must never end up in the form
   const cleanValue = (value, placeholder) => (value && value !== placeholder ? String(value) : '');
@@ -1855,6 +1886,64 @@ function ManageActivitiesView({ activeFilter, setFilter, openVolunteersFor, onVo
                 <button type="submit" onMouseDown={(e) => e.preventDefault()} disabled={savingEdit} className="eco-btn eco-btn-primary">{savingEdit ? 'Saving...' : 'Save changes'}</button>
               </div>
             </form>
+          </div>
+        );
+      })()}
+
+      {deleteTarget && (() => {
+        const joinedCount = deleteTarget.participantCount ?? deleteTarget.participants?.length ?? 0;
+        return (
+          <div className="ecotask-modal-backdrop eco-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 text-slate-800">
+            <div className="absolute inset-0" onClick={closeDeleteCard} />
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="delete-activity-title"
+              className="ecotask-modal-panel eco-modal relative z-10 w-full max-w-md overflow-hidden"
+            >
+              <div className="px-6 pb-2 pt-6 text-center">
+                <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-rose-600">
+                  <Trash2 className="h-6 w-6" />
+                </span>
+                <h3 id="delete-activity-title" className="mt-4 text-lg font-extrabold text-slate-800">
+                  Delete this activity?
+                </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-700 [overflow-wrap:anywhere]">{deleteTarget.title}</p>
+              </div>
+
+              <div className="space-y-3 px-6 py-4">
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-relaxed text-rose-800">
+                  <p className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="h-3.5 w-3.5" /> This can't be undone.
+                  </p>
+                  <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                    <li>The activity, its attendance records and reports will be removed.</li>
+                    {joinedCount > 0 ? (
+                      <li>
+                        <span className="font-bold">{joinedCount} volunteer{joinedCount === 1 ? '' : 's'}</span> who joined will be notified that it was cancelled.
+                      </li>
+                    ) : (
+                      <li>No volunteers have joined yet.</li>
+                    )}
+                  </ul>
+                </div>
+
+                {deleteError && (
+                  <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-xs font-semibold text-rose-700">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {deleteError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 border-t border-slate-100 px-6 py-4">
+                <button type="button" onClick={closeDeleteCard} disabled={deleting} className="eco-btn eco-btn-muted flex-1">
+                  Cancel
+                </button>
+                <button type="button" onClick={confirmDelete} disabled={deleting} className="eco-btn eco-btn-danger flex-1">
+                  <Trash2 className="h-4 w-4" /> {deleting ? 'Deleting...' : 'Delete activity'}
+                </button>
+              </div>
+            </div>
           </div>
         );
       })()}
